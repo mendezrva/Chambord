@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { PALETTE } from '../tiles/palette';
 import { makeRng, range } from '../tiles/rng';
+import { shardify } from '../tiles/shards';
 
 const mat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.95 });
 
@@ -14,7 +15,12 @@ export function Mountains() {
       const a = (i / 22) * Math.PI * 2 + range(rng, -0.08, 0.08);
       const r = range(rng, 46, 62);
       const h = range(rng, 9, 19);
-      return { x: Math.cos(a) * r, z: Math.sin(a) * r, h, w: h * range(rng, 0.55, 0.8), ry: rng() * 3 };
+      const w = h * range(rng, 0.55, 0.8);
+      return {
+        x: Math.cos(a) * r, z: Math.sin(a) * r, h, w, ry: rng() * 3,
+        rock: shardify(new THREE.ConeGeometry(w, h, 9, 5), rng, 0.06, true),
+        snow: shardify(new THREE.ConeGeometry(w * 0.36, h * 0.34, 9, 2), rng, 0.05, true),
+      };
     });
   }, []);
   const rock = useMemo(() => mat(PALETTE.mountain), []);
@@ -23,12 +29,8 @@ export function Mountains() {
     <group position={[0, -3, 0]}>
       {peaks.map((p, i) => (
         <group key={i} position={[p.x, 0, p.z]} rotation={[0, p.ry, 0]}>
-          <mesh material={rock} position={[0, p.h / 2, 0]}>
-            <coneGeometry args={[p.w, p.h, 5]} />
-          </mesh>
-          <mesh material={snow} position={[0, p.h * 0.83, 0]}>
-            <coneGeometry args={[p.w * 0.36, p.h * 0.34, 5]} />
-          </mesh>
+          <mesh material={rock} geometry={p.rock} position={[0, p.h / 2, 0]} />
+          <mesh material={snow} geometry={p.snow} position={[0, p.h * 0.83, 0]} />
         </group>
       ))}
     </group>
@@ -81,7 +83,9 @@ export function Lights({ extent, shadows }: { extent: number; shadows: boolean }
   const size = Math.max(8, extent + 4);
   return (
     <>
-      <hemisphereLight args={[0xe8f2ff, 0x5b4a36, 1.35]} />
+      <hemisphereLight args={[0xe8f2ff, 0x5b4a36, 1.2]} />
+      {/* Cool fill from the opposite side so every facet reads, like the reference renders. */}
+      <directionalLight position={[-size * 0.6, size * 0.4, -size * 0.5]} intensity={0.7} color={0xb8d4ff} />
       <directionalLight
         ref={light}
         position={[size * 0.55, size * 0.9, size * 0.35]}

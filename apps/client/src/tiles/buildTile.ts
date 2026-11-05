@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Center, Edge } from './catalog';
 import { makeRng, pick, range, type Rng } from './rng';
 import { PALETTE } from './palette';
+import { rockShard, shardify } from './shards';
 
 /** Tile size in world units, and the depth of the soil slab under it. */
 export const TILE = 2;
@@ -175,22 +176,46 @@ function addPine(parts: Parts, rng: Rng, x: number, z: number) {
   const s = range(rng, 0.75, 1.25);
   parts.add(new THREE.CylinderGeometry(0.025 * s, 0.035 * s, 0.12 * s, 5), PALETTE.trunk, { x, y: 0.06 * s, z });
   const green = pick(rng, PALETTE.pines);
-  parts.add(new THREE.ConeGeometry(0.16 * s, 0.3 * s, 6), green, { x, y: 0.24 * s, z, ry: rng() * 3, vary: 0.08 });
-  parts.add(new THREE.ConeGeometry(0.12 * s, 0.24 * s, 6), green, { x, y: 0.4 * s, z, ry: rng() * 3, vary: 0.08 });
-  parts.add(new THREE.ConeGeometry(0.075 * s, 0.17 * s, 6), green, { x, y: 0.53 * s, z, ry: rng() * 3, vary: 0.08 });
+  const tier = (r: number, h: number, y: number) =>
+    parts.add(shardify(new THREE.ConeGeometry(r * s, h * s, 8, 2), rng, 0.07), green, { x, y: y * s, z, ry: rng() * 3, vary: 0.13 });
+  tier(0.17, 0.3, 0.24);
+  tier(0.13, 0.25, 0.4);
+  tier(0.09, 0.2, 0.53);
+  tier(0.05, 0.14, 0.64);
 }
 
 function addRoundTree(parts: Parts, rng: Rng, x: number, z: number) {
   const s = range(rng, 0.8, 1.2);
-  parts.add(new THREE.CylinderGeometry(0.025 * s, 0.035 * s, 0.2 * s, 5), PALETTE.trunk, { x, y: 0.1 * s, z });
-  parts.add(new THREE.IcosahedronGeometry(0.15 * s, 0), pick(rng, PALETTE.leaves), {
-    x, y: 0.3 * s, z, ry: rng() * 3, sy: 1.1, vary: 0.1,
-  });
+  const lean = range(rng, -0.18, 0.18);
+  parts.add(shardify(new THREE.CylinderGeometry(0.022 * s, 0.04 * s, 0.24 * s, 6, 2), rng, 0.08), PALETTE.trunk, { x, y: 0.12 * s, z, rz: lean });
+  const leaf = pick(rng, PALETTE.leaves);
+  const tx = x - Math.sin(lean) * 0.2 * s;
+  const puffs = 3 + Math.floor(rng() * 2);
+  for (let i = 0; i < puffs; i++) {
+    const a = (i / puffs) * Math.PI * 2 + rng();
+    const r = range(rng, 0.08, 0.12) * s;
+    parts.add(rockShard(rng, r, 1, 0.12), leaf, {
+      x: tx + Math.cos(a) * 0.08 * s, y: range(rng, 0.3, 0.38) * s, z: z + Math.sin(a) * 0.08 * s, vary: 0.16,
+    });
+  }
+  parts.add(rockShard(rng, 0.11 * s, 1, 0.12), leaf, { x: tx, y: 0.42 * s, z, vary: 0.16 });
 }
 
 function addRock(parts: Parts, rng: Rng, x: number, z: number) {
   const s = range(rng, 0.06, 0.13);
-  parts.add(new THREE.DodecahedronGeometry(s, 0), PALETTE.rock, { x, y: s * 0.4, z, ry: rng() * 3, sy: 0.7, vary: 0.08 });
+  parts.add(rockShard(rng, s, 1, 0.16), PALETTE.rock, { x, y: s * 0.45, z, ry: rng() * 3, sy: range(rng, 0.8, 1.6), vary: 0.12 });
+  if (rng() < 0.5) {
+    const t = s * 0.55;
+    parts.add(rockShard(rng, t, 0, 0.2), PALETTE.rock, { x: x + s * 0.9, y: t * 0.4, z: z + s * 0.4, ry: rng() * 3, vary: 0.12 });
+  }
+}
+
+function addBush(parts: Parts, rng: Rng, x: number, z: number) {
+  const leaf = pick(rng, PALETTE.leaves);
+  for (let i = 0; i < 3; i++) {
+    const r = range(rng, 0.05, 0.08);
+    parts.add(rockShard(rng, r, 1, 0.14), leaf, { x: x + range(rng, -0.07, 0.07), y: r * 0.7, z: z + range(rng, -0.07, 0.07), sy: 0.8, vary: 0.16 });
+  }
 }
 
 function addMonk(parts: Parts, x: number, z: number) {
@@ -224,9 +249,17 @@ function addAbbey(parts: Parts, rng: Rng, offsetZ: number) {
 
 function addCastle(parts: Parts, rng: Rng) {
   // Rocky crag.
-  parts.add(new THREE.DodecahedronGeometry(0.5, 0), PALETTE.crag, { y: 0.12, sy: 0.6, ry: 0.4, vary: 0.08 });
-  parts.add(new THREE.DodecahedronGeometry(0.38, 0), PALETTE.crag, { x: 0.12, y: 0.32, z: -0.05, sy: 0.7, ry: 1.2, vary: 0.08 });
-  parts.add(new THREE.DodecahedronGeometry(0.3, 0), PALETTE.crag, { x: -0.18, y: 0.3, z: 0.1, sy: 0.6, ry: 2.1, vary: 0.08 });
+  parts.add(rockShard(rng, 0.5, 1, 0.1), PALETTE.crag, { y: 0.14, sy: 0.6, ry: 0.4, vary: 0.12 });
+  parts.add(rockShard(rng, 0.38, 1, 0.12), PALETTE.crag, { x: 0.12, y: 0.32, z: -0.05, sy: 0.75, ry: 1.2, vary: 0.12 });
+  parts.add(rockShard(rng, 0.3, 1, 0.12), PALETTE.crag, { x: -0.18, y: 0.3, z: 0.1, sy: 0.7, ry: 2.1, vary: 0.12 });
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + rng() * 0.5;
+    const r = range(rng, 0.42, 0.56);
+    const h = range(rng, 0.25, 0.5);
+    parts.add(shardify(new THREE.ConeGeometry(range(rng, 0.08, 0.14), h, 5, 2), rng, 0.12, true), PALETTE.crag, {
+      x: Math.cos(a) * r, y: h / 2, z: Math.sin(a) * r, rz: Math.cos(a) * -0.25, rx: Math.sin(a) * 0.25, vary: 0.14,
+    });
+  }
   const base = 0.5;
   // Keep and curtain walls.
   parts.add(new THREE.BoxGeometry(0.44, 0.34, 0.3), PALETTE.castleWall, { y: base + 0.17, vary: 0.02 });
@@ -305,7 +338,7 @@ export function buildTile(spec: TileSpec): BuiltTile {
   const riverPaths = buildPaths(rivers, spec.center === 'lake' ? 0.3 : 0);
 
   // --- slab: soil and rock sides, a grass rim, and a faceted meadow top ---
-  const soil = new THREE.BoxGeometry(W, SLAB, W, 4, 3, 4);
+  const soil = new THREE.BoxGeometry(W, SLAB, W, 6, 4, 6);
   const pos = soil.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
@@ -316,12 +349,33 @@ export function buildTile(spec: TileSpec): BuiltTile {
     }
     if (y < -SLAB / 2 + 0.01) pos.setY(i, y - range(rng, 0, 0.16));
   }
-  parts.add(soil, PALETTE.soil, { y: -SLAB / 2 - 0.08, vary: 0.09 });
+  parts.add(soil, PALETTE.soil, { y: -SLAB / 2 - 0.08, vary: 0.12 });
+  // Rock shards breaking out of the soil sides.
+  for (let i = 0; i < 8; i++) {
+    const side = i % 4;
+    const along = range(rng, -0.75, 0.75);
+    const m = MID[side];
+    const px = m[0] !== 0 ? m[0] * 0.97 : along;
+    const pz = m[1] !== 0 ? m[1] * 0.97 : along;
+    parts.add(rockShard(rng, range(rng, 0.08, 0.16), 0, 0.22), pick(rng, PALETTE.underRock), {
+      x: px, y: range(rng, -0.62, -0.25), z: pz, ry: rng() * 3, sx: 0.7, vary: 0.14,
+    });
+  }
+  // Jagged underside: hanging rock shards, like a chunk of land torn out of a hillside.
+  for (let i = 0; i < 7; i++) {
+    const r = range(rng, 0.25, 0.5);
+    const len = range(rng, 0.25, 0.6);
+    const px = range(rng, -0.6, 0.6), pz = range(rng, -0.6, 0.6);
+    const g = shardify(new THREE.ConeGeometry(r, len, 5, 2), rng, 0.12, false);
+    parts.add(g, pick(rng, PALETTE.underRock), {
+      x: px, y: -SLAB - 0.08 - len / 2 + 0.05, z: pz, rx: Math.PI, ry: rng() * 3, vary: 0.16,
+    });
+  }
   // A darker band of rock in the soil.
   parts.add(new THREE.BoxGeometry(W + 0.004, 0.06, W + 0.004, 3, 1, 3), PALETTE.rockBand, { y: -0.4, vary: 0.14 });
   parts.add(new THREE.BoxGeometry(W + 0.006, 0.1, W + 0.006), PALETTE.grassRim, { y: -0.05, vary: 0.05 });
 
-  const top = new THREE.PlaneGeometry(W, W, 8, 8);
+  const top = new THREE.PlaneGeometry(W, W, 12, 12);
   top.rotateX(-Math.PI / 2);
   const tp = top.attributes.position;
   for (let i = 0; i < tp.count; i++) {
@@ -333,14 +387,14 @@ export function buildTile(spec: TileSpec): BuiltTile {
     const flat = nearPath || inTown(p) || (hasCenterFeature && Math.hypot(x, z) < 0.55);
     tp.setX(i, x + range(rng, -0.05, 0.05));
     tp.setZ(i, z + range(rng, -0.05, 0.05));
-    tp.setY(i, flat ? 0 : range(rng, 0, 0.08));
+    tp.setY(i, flat ? 0 : range(rng, 0, 0.11));
   }
-  parts.add(top, PALETTE.meadow, { vary: 0.07 });
+  parts.add(top, PALETTE.meadow, { vary: 0.11 });
 
   // --- rivers ---
   for (const path of riverPaths) {
     stripAlong(parts, path, 0.66, 0.05, 0.015, PALETTE.riverbank, 0.06);
-    stripAlong(parts, path, 0.48, 0.05, 0.035, PALETTE.water, 0.07);
+    stripAlong(parts, path, 0.48, 0.05, 0.035, PALETTE.water, 0.14);
   }
   if (spec.center === 'lake') {
     parts.add(new THREE.CylinderGeometry(0.6, 0.66, 0.05, 9), PALETTE.riverbank, { y: 0.015, ry: 0.3 });
@@ -459,9 +513,10 @@ export function buildTile(spec: TileSpec): BuiltTile {
     if (towns.length && townTris.some(([a, b, c]) => distToSegment(p, a, b) < 0.12 || distToSegment(p, b, c) < 0.12 || distToSegment(p, c, a) < 0.12)) continue;
     trees.push(p);
     const r = rng();
-    if (r < 0.55) addPine(parts, rng, p[0], p[1]);
-    else if (r < 0.82) addRoundTree(parts, rng, p[0], p[1]);
-    else addRock(parts, rng, p[0], p[1]);
+    if (r < 0.5) addPine(parts, rng, p[0], p[1]);
+    else if (r < 0.74) addRoundTree(parts, rng, p[0], p[1]);
+    else if (r < 0.88) addRock(parts, rng, p[0], p[1]);
+    else addBush(parts, rng, p[0], p[1]);
   }
 
   return { geometry: parts.merge(), spots };

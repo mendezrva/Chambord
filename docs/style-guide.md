@@ -15,8 +15,10 @@ Chunky slabs of land with faceted, flat-shaded tops, warm sun, soft shadows and 
 | Size | 2 × 2 world units, square | Square tiles were chosen over hex |
 | Slab depth | 0.72 units of soil, plus a 0.1 grass rim | The cut-away earth is the signature of the references |
 | Gap between tiles | 0.035 units | Tiles read as separate pieces but the land still looks continuous |
-| Top surface | 8 × 8 grid, interior points jittered up to 0.08 high and 0.05 sideways | Gives the faceted meadow; edges stay flat so neighbours line up |
-| Shading | Flat shading, each triangle tinted ±5–9% from its base colour | The low-poly sparkle without textures |
+| Top surface | 12 × 12 grid, interior points jittered up to 0.11 high and 0.05 sideways | Gives the faceted meadow; edges stay flat so neighbours line up |
+| Shards | Rocks, crags, tree canopies, bushes and mountains start as icosahedrons or cones whose welded vertices are pushed out of shape (`tiles/shards.ts`) | The crystalline, many-faceted look of the references |
+| Underside | Soil sides with rock shards breaking out, and hanging rock cones below | Each tile reads as a chunk torn out of a hillside |
+| Shading | Flat shading, each triangle tinted ±5–16% from its base colour (more on natural surfaces, less on buildings) | The low-poly sparkle without textures |
 | Draw calls | One merged mesh per tile | Keeps 200+ tiles fast on phones |
 
 Features are always drawn from a tile's edges (road, town, meadow, river) and its centre feature, never hand-placed. The same tile seed always produces the same tile.

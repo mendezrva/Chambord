@@ -35,6 +35,7 @@ export const PALETTE = {
   pines: [0x2f7d4a, 0x2a6e43, 0x3a8a52] as const,
   leaves: [0x6fb54a, 0x5aa143, 0x8cc456] as const,
   rock: 0xb9b6ad,
+  underRock: [0x5d6170, 0x6b6878, 0x524f5c, 0x7a6f6a] as const,
   sky: 0xdde9f3,
   mountain: 0x9fb0c0,
   snow: 0xf4f7fa,
