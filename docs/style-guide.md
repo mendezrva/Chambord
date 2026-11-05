@@ -52,6 +52,20 @@ All colours live in `apps/client/src/tiles/palette.ts`. Key values:
 
 Player colours (in order): blue `#2f74c0`, red `#d9482b`, yellow `#f2b630`, green `#2e9b6b`, purple `#8a52c4`, black `#222831`, white `#f2f2f2`, pink `#e27fb0`. They differ in lightness as well as hue so they stay readable for colour-blind players.
 
+## Bavarian towns and villages
+
+Towns should read as Franconian old towns at a glance (Rothenburg, Bamberg, Nuremberg, Meissen are the references).
+
+| Element | Rule |
+|---|---|
+| Houses | Tall, narrow, steep gable faces the street. 2-3 jettied storeys, each overhanging the one below. Half-timbering in plain, X and K patterns over ochre, yellow, white or rose plaster. Green, blue or red shutters, geranium boxes, chimney. Some have a sandstone ground floor. |
+| Roofs | Steep red-orange tile, built as two faceted slabs. |
+| Walls | Stone walls with tiled caps, a round wall tower at each wall end. |
+| Gate towers | Where a road enters a town: arched gate, clock face, pyramid, onion or helmet roof, sometimes a stork nest. |
+| Squares | Fountain in big towns, maypole where there is one, beer garden with blue-and-white umbrellas, flower barrels. |
+| River | The bridge tile carries a Bamberg-style town hall on a sandstone island with a baroque tower. |
+| Countryside | Meadows can hold a farmstead with picket fence and barrel. Vineyard terraces below the castle. |
+
 ## Player pieces
 
 Wanderers: a rounded body in the player's colour, a skin-tone head, and a dark green felt hat with a white feather. About 0.4 units tall, so they read at a glance next to houses.

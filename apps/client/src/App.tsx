@@ -44,6 +44,8 @@ function CameraRig({ view, bounds, focus }: { view: View; bounds: ReturnType<typ
     c.mouseButtons.wheel = A.DOLLY;
     c.dollyToCursor = true;
     c.smoothTime = 0.35;
+    // Debug hook for automated screenshots: window.__camera.setLookAt(px, py, pz, tx, ty, tz).
+    (window as unknown as { __camera?: CameraControls }).__camera = c;
   }, []);
 
   useEffect(() => {

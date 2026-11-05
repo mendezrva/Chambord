@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Center, Edge } from './catalog';
 import { makeRng, pick, range, type Rng } from './rng';
 import { PALETTE } from './palette';
 import { rockShard, shardify } from './shards';
+import { Parts, gableRoof } from './parts';
+import * as B from './bavarian';
 
 /** Tile size in world units, and the depth of the soil slab under it. */
 export const TILE = 2;
@@ -30,51 +31,6 @@ const CORNERS: [V2, V2][] = [
   [[HALF, HALF], [-HALF, HALF]],
   [[-HALF, HALF], [-HALF, -HALF]],
 ];
-
-/** Collects coloured, flat-shaded parts and merges them into one geometry (one draw call per tile). */
-class Parts {
-  private list: THREE.BufferGeometry[] = [];
-  constructor(private rng: Rng) {}
-
-  add(
-    geom: THREE.BufferGeometry,
-    color: number,
-    o: { x?: number; y?: number; z?: number; ry?: number; rx?: number; rz?: number; sx?: number; sy?: number; sz?: number; vary?: number } = {},
-  ) {
-    const m = new THREE.Matrix4().compose(
-      new THREE.Vector3(o.x ?? 0, o.y ?? 0, o.z ?? 0),
-      new THREE.Quaternion().setFromEuler(new THREE.Euler(o.rx ?? 0, o.ry ?? 0, o.rz ?? 0)),
-      new THREE.Vector3(o.sx ?? 1, o.sy ?? 1, o.sz ?? 1),
-    );
-    let g = geom.index ? geom.toNonIndexed() : geom.clone();
-    g.applyMatrix4(m);
-    g.deleteAttribute('uv');
-    g.deleteAttribute('normal');
-    g.computeVertexNormals();
-    const count = g.attributes.position.count;
-    const colors = new Float32Array(count * 3);
-    const base = new THREE.Color(color);
-    const c = new THREE.Color();
-    const vary = o.vary ?? 0.05;
-    for (let i = 0; i < count; i += 3) {
-      // Each triangle gets a slightly different shade: that is the faceted low-poly look.
-      const k = 1 + (this.rng() - 0.5) * 2 * vary;
-      c.copy(base).multiplyScalar(k);
-      for (let j = 0; j < 3; j++) colors.set([c.r, c.g, c.b], (i + j) * 3);
-    }
-    g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    this.list.push(g);
-    geom.dispose();
-    return this;
-  }
-
-  merge() {
-    const merged = mergeGeometries(this.list, false)!;
-    this.list.forEach((g) => g.dispose());
-    merged.computeBoundingSphere();
-    return merged;
-  }
-}
 
 // ---------- small geometry helpers ----------
 
@@ -132,45 +88,7 @@ function stripAlong(parts: Parts, path: V2[], width: number, height: number, y: 
   }
 }
 
-function gableRoof(w: number, d: number, h: number) {
-  const shape = new THREE.Shape();
-  shape.moveTo(-w / 2, 0);
-  shape.lineTo(w / 2, 0);
-  shape.lineTo(0, h);
-  shape.closePath();
-  const g = new THREE.ExtrudeGeometry(shape, { depth: d, bevelEnabled: false });
-  g.translate(0, 0, -d / 2);
-  return g;
-}
-
 // ---------- feature builders ----------
-
-function addHouse(parts: Parts, rng: Rng, x: number, z: number, scale = 1) {
-  const w = range(rng, 0.24, 0.34) * scale;
-  const d = range(rng, 0.2, 0.27) * scale;
-  const h = range(rng, 0.2, 0.32) * scale;
-  const ry = pick(rng, [0, Math.PI / 2, 0.15, -0.15]);
-  const wall = pick(rng, PALETTE.facades);
-  const roof = pick(rng, PALETTE.roofs);
-  const local = (lx: number, lz: number): [number, number] => [
-    x + lx * Math.cos(ry) + lz * Math.sin(ry),
-    z - lx * Math.sin(ry) + lz * Math.cos(ry),
-  ];
-  parts.add(new THREE.BoxGeometry(w, h, d), wall, { x, y: h / 2, z, ry, vary: 0.03 });
-  // Half-timbering: a dark belt and corner posts.
-  parts.add(new THREE.BoxGeometry(w + 0.012, 0.022, d + 0.012), PALETTE.timber, { x, y: h * 0.55, z, ry });
-  for (const sx of [-1, 1]) {
-    const [px, pz] = local((sx * w) / 2, d / 2);
-    parts.add(new THREE.BoxGeometry(0.022, h, 0.014), PALETTE.timber, { x: px, y: h / 2, z: pz, ry });
-    const [qx, qz] = local((sx * w) / 2, -d / 2);
-    parts.add(new THREE.BoxGeometry(0.022, h, 0.014), PALETTE.timber, { x: qx, y: h / 2, z: qz, ry });
-  }
-  parts.add(gableRoof(w + 0.06, d + 0.06, h * 0.75 + 0.06), roof, { x, y: h, z, ry, vary: 0.06 });
-  if (rng() < 0.5) {
-    const [cx, cz] = local(w * 0.25, 0);
-    parts.add(new THREE.BoxGeometry(0.045, 0.12, 0.045), PALETTE.stone, { x: cx, y: h + h * 0.55, z: cz, ry });
-  }
-}
 
 function addPine(parts: Parts, rng: Rng, x: number, z: number) {
   const s = range(rng, 0.75, 1.25);
@@ -428,7 +346,7 @@ export function buildTile(spec: TileSpec): BuiltTile {
       g.rotateX(-Math.PI / 2);
       parts.add(g, PALETTE.plaza, { vary: 0.04 });
     }
-    // Low stone walls where the town meets the meadow.
+    // Town walls where the town meets the meadow, with square towers where walls end.
     const walls: [V2, V2][] = [];
     if (townBand) walls.push([townBand[2], townBand[3]]);
     else {
@@ -439,33 +357,78 @@ export function buildTile(spec: TileSpec): BuiltTile {
         if (!towns.includes(next)) walls.push([[0, 0], b]);
       }
     }
+    const towerAt = new Map<string, V2>();
     for (const [a, b] of walls) {
       const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
       const ang = Math.atan2(b[0] - a[0], b[1] - a[1]);
-      parts.add(new THREE.BoxGeometry(0.07, 0.14, len), PALETTE.townWall, { x: (a[0] + b[0]) / 2, y: 0.07, z: (a[1] + b[1]) / 2, ry: ang });
-      parts.add(new THREE.CylinderGeometry(0.06, 0.07, 0.22, 6), PALETTE.townWall, { x: a[0] * 0.98, y: 0.11, z: a[1] * 0.98 });
-      parts.add(new THREE.CylinderGeometry(0.06, 0.07, 0.22, 6), PALETTE.townWall, { x: b[0] * 0.98, y: 0.11, z: b[1] * 0.98 });
+      parts.add(new THREE.BoxGeometry(0.07, 0.16, len, Math.max(1, Math.round(len * 6)), 1, 1), PALETTE.townWall, { x: (a[0] + b[0]) / 2, y: 0.08, z: (a[1] + b[1]) / 2, ry: ang, vary: 0.06 });
+      parts.add(new THREE.BoxGeometry(0.08, 0.02, len), PALETTE.roofs[2], { x: (a[0] + b[0]) / 2, y: 0.17, z: (a[1] + b[1]) / 2, ry: ang, vary: 0.06 });
+      for (const e of [a, b]) towerAt.set(`${e[0].toFixed(2)},${e[1].toFixed(2)}`, [e[0] * 0.95, e[1] * 0.95]);
     }
-    // Houses.
-    const placed: V2[] = [];
-    const want = townBand ? 4 : towns.length * 3 + (towns.length === 4 ? 2 : 0);
-    const keepClear = (p: V2) =>
-      roadPaths.every((path) => distToPath(p, path) > 0.26) &&
-      walls.every(([a, b]) => distToSegment(p, a, b) > 0.17) &&
-      placed.every((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.34) &&
-      !(spec.center === 'maypole' && Math.hypot(p[0], p[1]) < 0.3) &&
-      Math.abs(p[0]) < HALF - 0.16 && Math.abs(p[1]) < HALF - 0.16;
-    for (let tries = 0; tries < 200 && placed.length < want; tries++) {
-      const p: V2 = [range(rng, -HALF, HALF), range(rng, -HALF, HALF)];
-      if (inTown(p) && keepClear(p)) {
-        placed.push(p);
-        addHouse(parts, rng, p[0], p[1]);
+    for (const t of towerAt.values()) B.wallTower(parts, t[0], t[1]);
+
+    // Gate towers where a road runs into the town.
+    const gates: V2[] = [];
+    for (const path of roadPaths) {
+      for (let i = 0; i < path.length - 1 && gates.length < 2; i++) {
+        let found = false;
+        for (let k = 0; k < 8; k++) {
+          const q0 = lerp2(path[i], path[i + 1], k / 8), q1 = lerp2(path[i], path[i + 1], (k + 1) / 8);
+          if (inTown(q0) !== inTown(q1)) {
+            const g = inTown(q1) ? q1 : q0;
+            const dir = Math.atan2(path[i + 1][0] - path[i][0], path[i + 1][1] - path[i][1]);
+            B.gateTower(parts, g[0], g[1], dir, pick(rng, ['pyramid', 'onion', 'helmet'] as const));
+            gates.push(g);
+            found = true;
+            break;
+          }
+        }
+        if (found) break;
       }
+    }
+
+    // Town square furniture: fountain or maypole, beer garden, flower barrels.
+    const placed: V2[] = [...gates];
+    const centroid: V2 = townTris.reduce<V2>((acc, [a, b, c]) => [acc[0] + (a[0] + b[0] + c[0]) / 3 / townTris.length, acc[1] + (a[1] + b[1] + c[1]) / 3 / townTris.length], [0, 0]);
+    const keepClear = (p: V2, gap = 0.3) =>
+      roadPaths.every((path) => distToPath(p, path) > 0.24) &&
+      walls.every(([a, b]) => distToSegment(p, a, b) > 0.17) &&
+      placed.every((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) > gap) &&
+      !(spec.center === 'maypole' && Math.hypot(p[0], p[1]) < 0.3) &&
+      Math.abs(p[0]) < HALF - 0.15 && Math.abs(p[1]) < HALF - 0.15;
+    const freeSpot = (gap: number, tries = 120): V2 | null => {
+      for (let t = 0; t < tries; t++) {
+        const p: V2 = [range(rng, -HALF, HALF), range(rng, -HALF, HALF)];
+        if (inTown(p) && keepClear(p, gap)) return p;
+      }
+      return null;
+    };
+    if (towns.length >= 3 && spec.center !== 'maypole') {
+      const f = freeSpot(0.3);
+      if (f) { B.fountain(parts, f[0], f[1]); placed.push(f); }
+    }
+    if (towns.length >= 3 && rng() < 0.7) {
+      const g = freeSpot(0.3);
+      if (g) { B.beerGarden(parts, g[0], g[1], rng() < 0.5 ? 0 : Math.PI / 2); placed.push(g); }
+    }
+    // Houses: tall gables turned to face the town square.
+    const want = townBand ? 4 : towns.length * 3 + (towns.length === 4 ? 2 : 0);
+    for (let tries = 0; tries < 220 && placed.length - gates.length < want + 2; tries++) {
+      const p: V2 = [range(rng, -HALF, HALF), range(rng, -HALF, HALF)];
+      if (!inTown(p) || !keepClear(p, 0.31)) continue;
+      placed.push(p);
+      const raw = Math.atan2(centroid[0] - p[0], centroid[1] - p[1]);
+      const face = Math.round(raw / (Math.PI / 2)) * (Math.PI / 2) + range(rng, -0.08, 0.08);
+      B.house(parts, p[0], p[1], face);
+    }
+    for (let i = 0; i < 2; i++) {
+      const fb = freeSpot(0.14, 60);
+      if (fb) { B.flowerBarrel(parts, fb[0], fb[1]); placed.push(fb); }
     }
     // A free spot in the town for a Wanderer.
     for (let tries = 0; tries < 80; tries++) {
       const p: V2 = [range(rng, -0.8, 0.8), range(rng, -0.8, 0.8)];
-      if (inTown(p) && placed.every((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.22)) { spots.town = p; break; }
+      if (inTown(p) && placed.every((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.2)) { spots.town = p; break; }
     }
     if (spec.banner) {
       const p = placed[0] ?? [0, 0];
@@ -487,6 +450,7 @@ export function buildTile(spec: TileSpec): BuiltTile {
       const o = { x: ry ? 0 : s * 0.22, z: ry ? s * 0.22 : 0 };
       parts.add(new THREE.BoxGeometry(0.03, 0.1, 0.8), PALETTE.timber, { ...o, y: 0.18, ry });
     }
+    B.bridgeHouse(parts, ry === 0);
   }
 
   // --- centre features ---
@@ -494,13 +458,21 @@ export function buildTile(spec: TileSpec): BuiltTile {
     addAbbey(parts, rng, roads.includes(2) ? -0.25 : 0);
     spots.abbey = [0.3, roads.includes(2) ? 0.2 : 0.4];
   }
-  if (spec.center === 'castle') addCastle(parts, rng);
+  if (spec.center === 'castle') {
+    addCastle(parts, rng);
+    B.vineyard(parts, -0.78, 0.78, 0.42, 0.9);
+  }
+  const bareMeadow = spec.center === 'none' && !towns.length && !roads.length && !rivers.length;
+  const farm = bareMeadow && rng() < 0.6;
+  if (farm) B.farmstead(parts, range(rng, -0.15, 0.15), range(rng, -0.25, -0.05), pick(rng, [0, Math.PI / 2, Math.PI, -Math.PI / 2]));
   if (spec.center === 'shrine') addShrine(parts);
   if (spec.center === 'maypole') addMaypole(parts);
 
   // --- meadow scenery ---
-  const treeCount = spec.center === 'none' && !towns.length && !roads.length && !rivers.length ? 13 : towns.length > 2 ? 2 : 6;
+  const treeCount = farm ? 5 : bareMeadow ? 13 : towns.length > 2 ? 2 : 6;
   const blocked = (p: V2) =>
+    (farm && Math.abs(p[0]) < 0.55 && Math.abs(p[1]) < 0.62) ||
+    (spec.center === 'castle' && p[1] > 0.35) ||
     [...roadPaths, ...riverPaths].some((path) => distToPath(p, path) < 0.36) ||
     inTown(p) ||
     townTris.some(([a, b, c]) => [a, b, c].some((v) => Math.hypot(p[0] - v[0], p[1] - v[1]) < 0.05)) ||
