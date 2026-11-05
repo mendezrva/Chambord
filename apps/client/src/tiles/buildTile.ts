@@ -5,6 +5,7 @@ import { PALETTE } from './palette';
 import { rockShard, shardify } from './shards';
 import { Parts, gableRoof } from './parts';
 import * as B from './bavarian';
+import * as T from './terrain';
 
 /** Tile size in world units, and the depth of the soil slab under it. */
 export const TILE = 2;
@@ -75,17 +76,6 @@ function buildPaths(dirs: number[], stopShort: number): V2[][] {
     const end = lerp2(m, [0, 0], (len - stopShort) / len);
     return [m, end];
   });
-}
-
-function stripAlong(parts: Parts, path: V2[], width: number, height: number, y: number, color: number, vary = 0.04) {
-  for (let i = 0; i < path.length - 1; i++) {
-    const [a, b] = [path[i], path[i + 1]];
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const ang = Math.atan2(b[0] - a[0], b[1] - a[1]);
-    parts.add(new THREE.BoxGeometry(width, height, len + width * 0.35), color, {
-      x: (a[0] + b[0]) / 2, y, z: (a[1] + b[1]) / 2, ry: ang, vary,
-    });
-  }
 }
 
 // ---------- feature builders ----------
@@ -195,6 +185,11 @@ function addCastle(parts: Parts, rng: Rng) {
   void rng;
 }
 
+function lake_(parts: Parts, water: Parts, rng: Rng) {
+  T.lake(parts, water, rng, 0.48);
+  addRock(parts, rng, 0.62, -0.6);
+}
+
 function addShrine(parts: Parts) {
   parts.add(new THREE.CylinderGeometry(0.1, 0.12, 0.05, 6), PALETTE.stone, { y: 0.11 });
   parts.add(new THREE.BoxGeometry(0.04, 0.26, 0.04), PALETTE.timber, { y: 0.24 });
@@ -225,6 +220,8 @@ function addBanner(parts: Parts, x: number, z: number) {
 
 export interface BuiltTile {
   geometry: THREE.BufferGeometry;
+  /** Rivers, lakes and puddles, drawn with the rippling water material. */
+  water?: THREE.BufferGeometry;
   /** Spots where a Wanderer could stand, by feature, for the demo. */
   spots: { town?: V2; road?: V2; abbey?: V2 };
 }
@@ -232,6 +229,7 @@ export interface BuiltTile {
 export function buildTile(spec: TileSpec): BuiltTile {
   const rng = makeRng(spec.seed);
   const parts = new Parts(rng);
+  const water = new Parts(rng);
   const dirs = (kind: Edge) => spec.edges.map((e, i) => (e === kind ? i : -1)).filter((i) => i >= 0);
   const roads = dirs('road');
   const rivers = dirs('river');
@@ -254,6 +252,22 @@ export function buildTile(spec: TileSpec): BuiltTile {
 
   const roadPaths = buildPaths(roads, hasCenterFeature ? 0.32 : roads.length === 1 ? 0.15 : 0.12);
   const riverPaths = buildPaths(rivers, spec.center === 'lake' ? 0.3 : 0);
+
+  const bareMeadow = spec.center === 'none' && !towns.length && !roads.length && !rivers.length;
+  const farm = bareMeadow && rng() < 0.6;
+  // Grass patches and, on some open meadows, a ploughed field.
+  const patches = T.meadowPatches(rng);
+  let field: T.Field | null = null;
+  if (farm) field = { x: 0, z: 0.78, w: 1.2, h: 0.28 };
+  else if (bareMeadow && rng() < 0.45) {
+    const along = rng() < 0.5;
+    field = { x: range(rng, -0.35, 0.35), z: range(rng, -0.35, 0.35), w: along ? 0.8 : 0.5, h: along ? 0.5 : 0.8 };
+  }
+  const meadowTint = (x: number, _y: number, z: number) => {
+    if (field && T.inField(field, x, z)) return PALETTE.earth;
+    for (const q of patches) if (T.inPatch(q, x, z)) return q.color;
+    return PALETTE.meadow;
+  };
 
   // --- slab: soil and rock sides, a grass rim, and a faceted meadow top ---
   const soil = new THREE.BoxGeometry(W, SLAB, W, 6, 4, 6);
@@ -302,24 +316,17 @@ export function buildTile(spec: TileSpec): BuiltTile {
     if (edge) continue;
     const p: V2 = [x, z];
     const nearPath = [...roadPaths, ...riverPaths].some((path) => distToPath(p, path) < 0.38);
-    const flat = nearPath || inTown(p) || (hasCenterFeature && Math.hypot(x, z) < 0.55);
+    const flat = nearPath || inTown(p) || (hasCenterFeature && Math.hypot(x, z) < 0.55) || (field !== null && T.inField({ ...field, w: field.w + 0.2, h: field.h + 0.2 }, x, z));
     tp.setX(i, x + range(rng, -0.05, 0.05));
     tp.setZ(i, z + range(rng, -0.05, 0.05));
     tp.setY(i, flat ? 0 : range(rng, 0, 0.11));
   }
-  parts.add(top, PALETTE.meadow, { vary: 0.11 });
+  parts.add(top, PALETTE.meadow, { vary: 0.11, tint: meadowTint });
+  if (field) T.furrows(parts, field);
 
   // --- rivers ---
-  for (const path of riverPaths) {
-    stripAlong(parts, path, 0.66, 0.05, 0.015, PALETTE.riverbank, 0.06);
-    stripAlong(parts, path, 0.48, 0.05, 0.035, PALETTE.water, 0.14);
-  }
-  if (spec.center === 'lake') {
-    parts.add(new THREE.CylinderGeometry(0.6, 0.66, 0.05, 9), PALETTE.riverbank, { y: 0.015, ry: 0.3 });
-    parts.add(new THREE.CylinderGeometry(0.5, 0.5, 0.05, 9), PALETTE.water, { y: 0.035, ry: 0.3, vary: 0.08 });
-    addRock(parts, rng, 0.45, -0.45);
-    addRock(parts, rng, -0.5, 0.38);
-  }
+  for (const path of riverPaths) T.river(parts, water, rng, path);
+  if (spec.center === 'lake') lake_(parts, water, rng);
   for (const d of spec.waterfalls ?? []) {
     const m = MID[d];
     const out = 1.02;
@@ -438,8 +445,7 @@ export function buildTile(spec: TileSpec): BuiltTile {
 
   // --- roads (drawn after towns so they run over the plaza) ---
   for (const path of roadPaths) {
-    stripAlong(parts, path, 0.36, 0.05, 0.03, PALETTE.roadEdge, 0.03);
-    stripAlong(parts, path, 0.26, 0.05, 0.045, PALETTE.road, 0.06);
+    T.road(parts, water, rng, path, { fence: !towns.length && !rivers.length && rng() < 0.45, puddle: rng() < 0.4 });
     spots.road ??= path[Math.floor(path.length / 2)] ?? path[0];
   }
   // Bridge over the river.
@@ -462,8 +468,6 @@ export function buildTile(spec: TileSpec): BuiltTile {
     addCastle(parts, rng);
     B.vineyard(parts, -0.78, 0.78, 0.42, 0.9);
   }
-  const bareMeadow = spec.center === 'none' && !towns.length && !roads.length && !rivers.length;
-  const farm = bareMeadow && rng() < 0.6;
   if (farm) B.farmstead(parts, range(rng, -0.15, 0.15), range(rng, -0.25, -0.05), pick(rng, [0, Math.PI / 2, Math.PI, -Math.PI / 2]));
   if (spec.center === 'shrine') addShrine(parts);
   if (spec.center === 'maypole') addMaypole(parts);
@@ -472,6 +476,7 @@ export function buildTile(spec: TileSpec): BuiltTile {
   const treeCount = farm ? 5 : bareMeadow ? 13 : towns.length > 2 ? 2 : 6;
   const blocked = (p: V2) =>
     (farm && Math.abs(p[0]) < 0.55 && Math.abs(p[1]) < 0.62) ||
+    (field !== null && T.inField({ ...field, w: field.w + 0.2, h: field.h + 0.2 }, p[0], p[1])) ||
     (spec.center === 'castle' && p[1] > 0.35) ||
     [...roadPaths, ...riverPaths].some((path) => distToPath(p, path) < 0.36) ||
     inTown(p) ||
@@ -491,5 +496,22 @@ export function buildTile(spec: TileSpec): BuiltTile {
     else addBush(parts, rng, p[0], p[1]);
   }
 
-  return { geometry: parts.merge(), spots };
+  // A hedgerow across some open meadows.
+  if (bareMeadow && !field && rng() < 0.4) {
+    const z = range(rng, -0.6, 0.6);
+    T.hedgerow(parts, rng, [-0.8, z], [0.8, z + range(rng, -0.3, 0.3)]);
+  }
+  // Wildflowers and grass tufts in the gaps.
+  const dressing = towns.length > 2 ? 4 : 12;
+  let placed = 0;
+  for (let tries = 0; tries < 80 && placed < dressing; tries++) {
+    const p: V2 = [range(rng, -0.9, 0.9), range(rng, -0.9, 0.9)];
+    if (blocked(p) || trees.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.14)) continue;
+    if (towns.length && townTris.some(([a, b, c]) => distToSegment(p, a, b) < 0.12 || distToSegment(p, b, c) < 0.12 || distToSegment(p, c, a) < 0.12)) continue;
+    placed++;
+    if (rng() < 0.55) T.flowers(parts, rng, p[0], p[1]); else T.tuft(parts, rng, p[0], p[1]);
+  }
+
+  const w = water.merge();
+  return { geometry: parts.merge(), water: w.attributes.position?.count ? w : undefined, spots };
 }

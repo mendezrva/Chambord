@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Rng } from './rng';
 
-export interface PartOpts { x?: number; y?: number; z?: number; ry?: number; rx?: number; rz?: number; sx?: number; sy?: number; sz?: number; vary?: number }
+export interface PartOpts { x?: number; y?: number; z?: number; ry?: number; rx?: number; rz?: number; sx?: number; sy?: number; sz?: number; vary?: number;
+  /** Optional colour per triangle, from its centre after placement (for patchy meadows, gradients). */
+  tint?: (x: number, y: number, z: number) => number }
 
 /** Collects coloured, flat-shaded parts and merges them into one geometry (one draw call per tile). */
 export class Parts {
@@ -30,9 +32,16 @@ export class Parts {
     const base = new THREE.Color(color);
     const c = new THREE.Color();
     const vary = o.vary ?? 0.05;
+    const pa = g.attributes.position;
     for (let i = 0; i < count; i += 3) {
       // Each triangle gets a slightly different shade: that is the faceted low-poly look.
       const k = 1 + (this.rng() - 0.5) * 2 * vary;
+      if (o.tint) {
+        const cx = (pa.getX(i) + pa.getX(i + 1) + pa.getX(i + 2)) / 3;
+        const cy = (pa.getY(i) + pa.getY(i + 1) + pa.getY(i + 2)) / 3;
+        const cz = (pa.getZ(i) + pa.getZ(i + 1) + pa.getZ(i + 2)) / 3;
+        base.set(o.tint(cx, cy, cz));
+      }
       c.copy(base).multiplyScalar(k);
       for (let j = 0; j < 3; j++) colors.set([c.r, c.g, c.b], (i + j) * 3);
     }
@@ -43,6 +52,7 @@ export class Parts {
   }
 
   merge() {
+    if (!this.list.length) return new THREE.BufferGeometry();
     const merged = mergeGeometries(this.list, false)!;
     this.list.forEach((g) => g.dispose());
     merged.computeBoundingSphere();

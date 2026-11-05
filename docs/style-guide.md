@@ -66,6 +66,16 @@ Towns should read as Franconian old towns at a glance (Rothenburg, Bamberg, Nure
 | River | The bridge tile carries a Bamberg-style town hall on a sandstone island with a baroque tower. |
 | Countryside | Meadows can hold a farmstead with picket fence and barrel. Vineyard terraces below the castle. |
 
+## Water, roads and fields
+
+| Element | Rule |
+|---|---|
+| Water | Its own mesh with a glossy material (roughness 0.3) and a vertex-shader ripple, flat-shaded so the ripples facet. Three bands: sandy bank, pale shallows, deep teal. Widths wobble along the course. White foam flecks ride the current. |
+| Banks | Small grey rocks and clumps of reeds along rivers and around lakes. Lakes are wobbly discs, not circles. |
+| Roads | Dirt tracks: pale verge, packed-earth centre, two darker wheel ruts. Stones scatter on the verges, some country roads get a split-rail fence on one side, some a puddle. |
+| Meadows | Base green plus 3-5 irregular patches of hay, deep green, lush and scrub tones, coloured per facet. Wildflower clusters (white, yellow, red, purple) and grass tufts fill the gaps. |
+| Fields | Open meadows may carry a ploughed field (bare earth, dark furrows, sprouting rows) or a hedgerow of bushes. Farmsteads always have a strip field. |
+
 ## Player pieces
 
 Wanderers: a rounded body in the player's colour, a skin-tone head, and a dark green felt hat with a white feather. About 0.4 units tall, so they read at a glance next to houses.

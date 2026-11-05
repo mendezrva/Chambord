@@ -5,7 +5,7 @@ import type { Board, Placement } from '../board/layout';
 import { buildTile, TILE, type BuiltTile } from '../tiles/buildTile';
 import { seedFor } from '../tiles/rng';
 import { PLAYER_COLORS } from '../tiles/palette';
-import { landMaterial } from './materials';
+import { landMaterial, waterMaterial, waterUniforms } from './materials';
 import { wandererGeometry } from './Wanderer';
 
 const DROP_HEIGHT = 5;
@@ -85,6 +85,7 @@ export function BoardView({
   useFrame((_, dt) => {
     clock.current += Math.min(dt, 0.05);
     const now = clock.current;
+    waterUniforms.uTime.value = now;
     anims.current.forEach((a, i) => {
       const g = groups.current[i];
       if (!g) return;
@@ -116,7 +117,7 @@ export function BoardView({
       g.position.y = y;
       g.scale.set(sxz, sy, sxz);
       // The Wanderer hops in after the tile lands.
-      const w = g.children[1];
+      const w = g.getObjectByName('wanderer');
       if (w) {
         const wt = t - DROP_TIME - 0.25;
         w.visible = wt > 0;
@@ -151,8 +152,10 @@ export function BoardView({
           ref={(g) => { groups.current[p.order] = g; }}
         >
           <mesh geometry={built.geometry} material={landMaterial} castShadow={shadows} receiveShadow={shadows} />
+          {built.water && <mesh geometry={built.water} material={waterMaterial} receiveShadow={shadows} />}
           {wanderer && (
             <mesh
+              name="wanderer"
               geometry={wandererGeometry(wanderer.color)}
               material={landMaterial}
               position={[wanderer.spot[0], 0.06, wanderer.spot[1]]}
