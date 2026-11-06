@@ -191,3 +191,56 @@ export const PRESETS: Record<string, GameOptions & { name: string; description: 
   bigTable: { name: 'Big table, 8 players', description: 'Doubled deck with the river and hop gardens.', players: 8, modules: ['riverlands', 'hopGardens'], rules: ['marathon'] },
   party: { name: 'Party night', description: 'Action tiles, beer gardens and market day.', players: 4, modules: ['actions', 'beerGardens', 'marketDay'] },
 };
+
+// ---------- game specs (plain data, safe to send over the network) ----------
+
+/** A custom game as plain data: what the builder edits and what the server receives. */
+export interface GameSpec {
+  players: number;
+  modules: string[];
+  rules: string[];
+  /** Sparse edits: 'deck.<tileId>' or a numeric config path such as 'scoring.town.perTile'. */
+  edits: Record<string, number>;
+}
+
+const EDIT_ROOTS = ['pieces', 'scoring', 'turn', 'end'];
+const BLOCKED_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
+/**
+ * Applies builder edits to a config. Only existing numeric fields under pieces, scoring, turn
+ * and end, and deck counts of known tiles, can change, so a spec from the network can't reach
+ * anything else.
+ */
+export function applyEdits(c: GameConfig, edits: Record<string, number>) {
+  for (const [k, raw] of Object.entries(edits ?? {})) {
+    const v = Number(raw);
+    if (!Number.isFinite(v)) continue;
+    const n = Math.max(0, Math.min(1000, Math.round(v)));
+    if (k.startsWith('deck.')) {
+      const id = k.slice(5);
+      if (!Object.prototype.hasOwnProperty.call(c.tiles, id) || id === c.startTile) continue;
+      const e = c.deck.find((d) => d.tileId === id);
+      if (e) e.count = Math.min(n, 50); else c.deck.push({ tileId: id, count: Math.min(n, 50) });
+      continue;
+    }
+    const ks = k.split('.');
+    if (!EDIT_ROOTS.includes(ks[0]) || ks.some((x) => BLOCKED_KEYS.has(x))) continue;
+    const last = ks.pop()!;
+    let t: any = c; // eslint-disable-line @typescript-eslint/no-explicit-any
+    for (const x of ks) { t = Object.prototype.hasOwnProperty.call(t, x) ? t[x] : undefined; if (!t || typeof t !== 'object') break; }
+    if (t && typeof t === 'object' && Object.prototype.hasOwnProperty.call(t, last) && typeof t[last] === 'number') t[last] = n;
+  }
+}
+
+/** Engine options for a spec, with its edits as the custom step. */
+export function optionsFromSpec(spec: GameSpec): GameOptions {
+  return {
+    players: spec.players,
+    modules: [...(spec.modules ?? [])],
+    rules: [...(spec.rules ?? [])],
+    customize: (c) => applyEdits(c, spec.edits ?? {}),
+  };
+}
+
+/** Builds a config from a spec. Throws on bad input, like `buildConfig`. */
+export const configFromSpec = (spec: GameSpec) => buildConfig(optionsFromSpec(spec));

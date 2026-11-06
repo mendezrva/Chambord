@@ -5,8 +5,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ALL_TILES, buildConfig, DRAFT_RULES, findConflicts, MODULES, PRESETS, isRiver,
-  type GameConfig, type GameOptions,
+  ALL_TILES, buildConfig, DRAFT_RULES, findConflicts, MODULES, optionsFromSpec, PRESETS, isRiver,
+  type GameConfig, type GameOptions, type GameSpec,
 } from '@glockenfels/engine';
 import type { Seat } from '../game/session';
 import { playerCss } from '../scene/GameBoard';
@@ -76,29 +76,15 @@ const SCORE_FIELDS: { group: string; fields: Field[] }[] = [
 const ALL_FIELDS = [...GAME_FIELDS, ...SCORE_FIELDS.flatMap((g) => g.fields)];
 
 const getPath = (o: unknown, path: string) => path.split('.').reduce<any>((a, k) => a?.[k], o); // eslint-disable-line @typescript-eslint/no-explicit-any
-function setPath(o: unknown, path: string, v: number) {
-  const ks = path.split('.');
-  const last = ks.pop()!;
-  const t = ks.reduce<any>((a, k) => a[k], o); // eslint-disable-line @typescript-eslint/no-explicit-any
-  t[last] = v;
-}
 
 /** The engine options for a builder, with its edits as the custom step. */
-export function optionsFor(b: Builder, withRules = b.ruleMode === 'pick'): GameOptions {
-  return {
-    players: b.seats.length,
-    modules: b.modules,
-    rules: withRules ? b.rules : [],
-    customize: (c) => {
-      for (const [k, v] of Object.entries(b.edits)) {
-        if (k.startsWith('deck.')) {
-          const id = k.slice(5);
-          const e = c.deck.find((d) => d.tileId === id);
-          if (e) e.count = v; else c.deck.push({ tileId: id, count: v });
-        } else setPath(c, k, v);
-      }
-    },
-  };
+export function optionsFor(b: Builder, withRules = b.ruleMode === 'pick', players = b.seats.length): GameOptions {
+  return optionsFromSpec(specFor(b, withRules, players));
+}
+
+/** The builder as plain data, for the server. */
+export function specFor(b: Builder, withRules = b.ruleMode === 'pick', players = b.seats.length): GameSpec {
+  return { players, modules: b.modules, rules: withRules ? b.rules : [], edits: b.edits };
 }
 
 function Stepper({ value, min, max, step = 1, onChange, zero, label }: { value: number; min: number; max: number; step?: number; onChange: (v: number) => void; zero?: string; label: string }) {
@@ -123,14 +109,26 @@ function Section({ title, children, open: initial = false, summary }: { title: s
   );
 }
 
-export function Setup({ onStart, onResume, canResume, onStyleTest }: {
+/** Builder fields for an online room's settings, with placeholder seats for the player count. */
+export function builderFromSettings(st: { modules: string[]; rules: string[]; ruleMode: 'pick' | 'draft'; edits: Record<string, number>; preset: string | null }, players: number): Builder {
+  return {
+    ...defaultBuilder(),
+    seats: Array.from({ length: Math.max(2, players) }, (_, i) => ({ name: DEFAULT_NAMES[i], bot: false })),
+    modules: st.modules, rules: st.rules, ruleMode: st.ruleMode, edits: st.edits, preset: st.preset,
+  };
+}
+
+export function Setup({ onStart, onResume, canResume = false, onStyleTest, onOnline, online }: {
   onStart: (b: Builder, config: GameConfig | null) => void;
-  onResume: () => void;
-  canResume: boolean;
-  onStyleTest: () => void;
+  onResume?: () => void;
+  canResume?: boolean;
+  onStyleTest?: () => void;
+  onOnline?: () => void;
+  /** Edit an online room's rules: no seats, and the button saves instead of starting. */
+  online?: { initial: Builder; onCancel: () => void };
 }) {
-  const [b, setB] = useState<Builder>(loadBuilder);
-  useEffect(() => saveBuilder(b), [b]);
+  const [b, setB] = useState<Builder>(() => online?.initial ?? loadBuilder());
+  useEffect(() => { if (!online) saveBuilder(b); }, [b, online]);
   const update = (p: Partial<Builder>) => setB((o) => ({ ...o, ...p, preset: p.preset !== undefined ? p.preset : null }));
 
   // Build twice: once to read the raw deck before the multipliers, once for the real config.
@@ -161,7 +159,7 @@ export function Setup({ onStart, onResume, canResume, onStyleTest }: {
     const tuned = buildConfig(p);
     const edits: Record<string, number> = {};
     for (const f of ALL_FIELDS) if (getPath(tuned, f.path) !== getPath(plain, f.path)) edits[f.path] = getPath(tuned, f.path);
-    const seats = Array.from({ length: p.players }, (_, i) => b.seats[i] ?? { name: DEFAULT_NAMES[i], bot: false });
+    const seats = online ? b.seats : Array.from({ length: p.players }, (_, i) => b.seats[i] ?? { name: DEFAULT_NAMES[i], bot: false });
     setB({ ...b, seats, modules: p.modules ?? [], rules: p.rules ?? [], ruleMode: 'pick', edits, preset: id });
   };
 
@@ -219,13 +217,23 @@ export function Setup({ onStart, onResume, canResume, onStyleTest }: {
   return (
     <div className="setup">
       <div className="setup-inner">
-        <header className="title">
-          <h1>Glockenfels</h1>
-          <p>Lay the valley tile by tile. Send out your Wanderers. Pass the device.</p>
-        </header>
+        {online ? (
+          <header className="title small">
+            <h1>Game rules</h1>
+            <p>Everyone at the table plays by these. Player count comes from the table ({b.seats.length}).</p>
+          </header>
+        ) : (
+          <header className="title">
+            <h1>Glockenfels</h1>
+            <p>Lay the valley tile by tile. Send out your Wanderers. Pass the device, or play friends online.</p>
+          </header>
+        )}
 
         {canResume && (
           <button type="button" className="primary wide resume" onClick={onResume}>Continue saved game</button>
+        )}
+        {onOnline && (
+          <button type="button" className="wide online-btn" onClick={onOnline}><b>Play online</b><small>Friends, invites, ratings and the leaderboard</small></button>
         )}
 
         <section className="card open">
@@ -239,7 +247,7 @@ export function Setup({ onStart, onResume, canResume, onStyleTest }: {
           </div>
         </section>
 
-        <section className="card open">
+        {!online && <section className="card open">
           <div className="card-head static"><span>Players</span><small>{b.seats.length} · {humans} at this device</small></div>
           <div className="card-body">
             {b.seats.map((s, i) => (
@@ -259,7 +267,7 @@ export function Setup({ onStart, onResume, canResume, onStyleTest }: {
             </div>
             {humans > 1 && <Toggle id="handoff" label="Pass-the-device screen between turns" checked={b.handoff} onChange={(v) => update({ handoff: v, preset: b.preset })} />}
           </div>
-        </section>
+        </section>}
 
         <Section title="Modules" summary={b.modules.length ? `${b.modules.length} on` : 'None'} open={b.modules.length > 0}>
           {MODULES.map((m) => {
@@ -280,7 +288,7 @@ export function Setup({ onStart, onResume, canResume, onStyleTest }: {
             <button type="button" aria-pressed={b.ruleMode === 'draft'} onClick={() => update({ ruleMode: 'draft' })}>Secret draft</button>
           </div>
           {b.ruleMode === 'draft' ? (
-            <p className="note">Before the game, each player secretly picks one rule. They are revealed together. If two clash, {b.seats[0]?.name || 'the host'} (the host) keeps one and the other player picks again. The engine plays a few quick bot games to be sure the mix works.</p>
+            <p className="note">Before the game, each player secretly picks one rule{online ? ' on their own device' : ''}. They are revealed together. If two clash, {online ? 'the host' : `${b.seats[0]?.name || 'the host'} (the host)`} keeps one and the other player picks again. The engine plays a few quick bot games to be sure the mix works.</p>
           ) : (
             <div className="rule-grid">
               {DRAFT_RULES.map((r) => {
@@ -320,9 +328,9 @@ export function Setup({ onStart, onResume, canResume, onStyleTest }: {
 
         {preview.error && <p className="error" role="alert">{preview.error}</p>}
         <div className="start-bar">
-          <button type="button" className="link" onClick={onStyleTest}>Graphics test</button>
+          {online ? <button type="button" className="link" onClick={online.onCancel}>Cancel</button> : onStyleTest && <button type="button" className="link" onClick={onStyleTest}>Graphics test</button>}
           <button type="button" className="primary wide" disabled={!!preview.error || !cfg} onClick={() => onStart(b, b.ruleMode === 'draft' ? null : cfg)}>
-            {b.ruleMode === 'draft' ? 'Start the rule draft' : 'Start game'}
+            {online ? 'Use these rules' : b.ruleMode === 'draft' ? 'Start the rule draft' : 'Start game'}
           </button>
         </div>
       </div>

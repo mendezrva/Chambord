@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import { buildConfig, type GameConfig } from '@glockenfels/engine';
 import StyleTest from './StyleTest';
-import { loadSave, writeSave, type SavedGame } from './game/session';
+import { loadSave, useGame, writeSave, type SavedGame } from './game/session';
 import { GameScreen } from './ui/GameScreen';
 import { Setup, optionsFor, type Builder } from './ui/Setup';
 import { Draft } from './ui/Draft';
+import { Online } from './ui/Online';
 
 type Screen =
   | { kind: 'setup' }
   | { kind: 'draft'; builder: Builder }
   | { kind: 'game'; saved: SavedGame; n: number }
-  | { kind: 'style' };
+  | { kind: 'style' }
+  | { kind: 'online'; join: string | null };
 
 const newSeed = () => (Math.random() * 2 ** 31) >>> 0;
 
@@ -25,9 +27,15 @@ function newGame(b: Builder, config: GameConfig, drafted?: SavedGame['drafted'])
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>(() =>
-    new URLSearchParams(location.search).has('styletest') ? { kind: 'style' } : { kind: 'setup' });
+  const [screen, setScreen] = useState<Screen>(() => {
+    const q = new URLSearchParams(location.search);
+    if (q.has('styletest')) return { kind: 'style' };
+    if (q.has('join') || q.has('online')) return { kind: 'online', join: q.get('join')?.toUpperCase() ?? null };
+    return { kind: 'setup' };
+  });
   const [save, setSave] = useState(loadSave);
+
+  if (screen.kind === 'online') return <Online joinCode={screen.join} onBack={() => setScreen({ kind: 'setup' })} />;
 
   if (screen.kind === 'style') return <StyleTest onBack={() => setScreen({ kind: 'setup' })} />;
 
@@ -46,7 +54,7 @@ export default function App() {
   if (screen.kind === 'game') {
     const saved = screen.saved;
     return (
-      <GameScreen
+      <LocalGame
         key={screen.n}
         saved={saved}
         onQuit={() => { setSave(loadSave()); setScreen({ kind: 'setup' }); }}
@@ -64,6 +72,7 @@ export default function App() {
       canResume={!!save}
       onResume={() => { const s = loadSave(); if (s) setScreen({ kind: 'game', saved: s, n: Date.now() }); }}
       onStyleTest={() => setScreen({ kind: 'style' })}
+      onOnline={() => setScreen({ kind: 'online', join: null })}
       onStart={(b, config) => {
         if (b.ruleMode === 'draft') { setScreen({ kind: 'draft', builder: b }); return; }
         const cfg = config ?? buildConfig(optionsFor(b));
@@ -71,4 +80,9 @@ export default function App() {
       }}
     />
   );
+}
+
+function LocalGame({ saved, onQuit, onRematch }: { saved: SavedGame; onQuit: () => void; onRematch: () => void }) {
+  const game = useGame(saved);
+  return <GameScreen game={game} onQuit={onQuit} onRematch={onRematch} />;
 }

@@ -49,7 +49,31 @@ export function writeSave(s: SavedGame | null) {
 
 export interface Batch { n: number; events: GameEvent[]; player: number }
 
-export function useGame(saved: SavedGame) {
+/** A seat as the game screen sees it. `local` seats are played on this device. */
+export interface PlaySeat { name: string; bot: boolean; local: boolean; online?: boolean; awayFor?: number; botControl?: boolean; resigned?: boolean; rating?: number }
+
+/**
+ * Everything the game screen needs, whoever holds the real game: this device (pass and play),
+ * the server (online) or a finished record (replay).
+ */
+export interface GameController {
+  mode: 'local' | 'online' | 'replay';
+  state: GameState;
+  version: number;
+  batch: Batch | null;
+  error: string | null;
+  clearError: () => void;
+  dispatch: (a: Action) => boolean;
+  undo: () => void;
+  seats: PlaySeat[];
+  seed: number;
+  /** Run bot seats on this device. */
+  runBots: boolean;
+  handoff: boolean;
+  drafted?: { rule: string; player: number }[];
+}
+
+export function useGame(saved: SavedGame): GameController {
   const names = useMemo(() => saved.seats.map((s) => s.name), [saved]);
   const ref = useRef<GameState | null>(null);
   if (!ref.current) ref.current = replay(saved.config, saved.seed, saved.log, names);
@@ -91,5 +115,9 @@ export function useGame(saved: SavedGame) {
     persist(ref.current);
   }, [saved, names]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { state: ref.current, version, batch, error, dispatch, undo, clearError: () => setError(null) };
+  const seats = useMemo(() => saved.seats.map((x) => ({ name: x.name, bot: x.bot, local: !x.bot })), [saved]);
+  return {
+    mode: 'local', state: ref.current, version, batch, error, dispatch, undo, clearError: () => setError(null),
+    seats, seed: saved.seed, runBots: true, handoff: saved.handoff, drafted: saved.drafted,
+  } satisfies GameController;
 }

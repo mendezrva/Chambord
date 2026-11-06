@@ -7,8 +7,11 @@
   ],
   "scripts": {
     "dev": "npm run dev -w apps/client",
+    "dev:server": "npm run dev -w apps/server",
     "build": "npm run build -w apps/client",
+    "online": "npm run build && npm start",
+    "start": "npm start -w apps/server",
     "typecheck": "npm run typecheck --workspaces",
-    "test": "npm run test -w packages/engine"
+    "test": "npm run test -w packages/engine && npm run test -w apps/server"
   }
 }
