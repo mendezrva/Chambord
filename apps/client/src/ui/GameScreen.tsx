@@ -16,7 +16,8 @@ import { Clouds, Lights, Mountains } from '../scene/World';
 import { Confetti } from '../scene/Confetti';
 import { BoardTiles, ClaimSpots, GhostTile, playerColor, playerCss, Popups, SpotMarkers, usePieces, useTiles, Wanderers, type PieceItem, type Popup } from '../scene/GameBoard';
 import { boundsOf, CameraRig, declineQuality, defaultQuality, Effects, ProjectHook, reducedMotion, Stats, type Quality, type View } from '../scene/Stage';
-import { useGame, type SavedGame } from '../game/session';
+import type { GameController } from '../game/session';
+import type { ResultRow } from '@glockenfels/protocol';
 import { featureLabel } from '../game/tiles3d';
 import { ACTION_INFO, ActionCard, TileCard } from './TileCard';
 import { Toggle } from './Overlay';
@@ -39,12 +40,29 @@ function Pieces({ n, grand, color }: { n: number; grand: number; color: string }
   );
 }
 
-export function GameScreen({ saved, onQuit, onRematch }: { saved: SavedGame; onQuit: () => void; onRematch: () => void }) {
-  const { state: s, version, batch, error, dispatch, undo, clearError } = useGame(saved);
-  const seats = saved.seats;
-  const humans = seats.filter((x) => !x.bot).length;
+/** Extra controls and results when the game is played online. */
+export interface OnlineExtras {
+  result?: ResultRow[];
+  rated: boolean;
+  onTakeover: (seat: number) => void;
+  onResign: () => void;
+  takeoverAfter: number;
+}
+
+export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save and quit', rematchLabel = 'Play again' }: {
+  game: GameController;
+  onQuit: () => void;
+  onRematch?: () => void;
+  online?: OnlineExtras;
+  quitLabel?: string;
+  rematchLabel?: string;
+}) {
+  const { state: s, version, batch, error, dispatch, undo, clearError } = game;
+  const seats = game.seats;
+  // People playing on this device: more than one means pass and play.
+  const humans = seats.filter((x) => x.local).length;
   const seat = seats[s.current];
-  const isHuman = !seat.bot && s.step !== 'ended';
+  const isHuman = seat.local && s.step !== 'ended';
   const me = s.players[s.current];
   const color = playerColor(s.current);
 
@@ -212,16 +230,16 @@ export function GameScreen({ saved, onQuit, onRematch }: { saved: SavedGame; onQ
     if (lastTurnOf.current === s.current) return;
     const prev = lastTurnOf.current;
     lastTurnOf.current = s.current;
-    if (seat.bot) return;
-    if (saved.handoff && humans > 1 && prev !== null) setCurtain(s.current);
+    if (!seat.local) return;
+    if (game.handoff && humans > 1 && prev !== null) setCurtain(s.current);
     else if (prev !== null && humans > 1) toast(`${seat.name}’s turn`);
   }, [s.current, s.turn, s.step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- bots ----------
   useEffect(() => {
-    if (s.step === 'ended' || !seat.bot || curtain !== null) return;
+    if (!game.runBots || s.step === 'ended' || !seat.bot || curtain !== null) return;
     const delay = (BOT_DELAY[s.step] ?? 700) * (humans === 0 ? 0.6 : 1);
-    const t = setTimeout(() => dispatch(botAction(s, saved.seed + s.log.length)), delay);
+    const t = setTimeout(() => dispatch(botAction(s, game.seed + s.log.length)), delay);
     return () => clearTimeout(t);
   }, [version, curtain]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -256,10 +274,22 @@ export function GameScreen({ saved, onQuit, onRematch }: { saved: SavedGame; onQ
         <button type="button" className="primary" onClick={() => setShowEnd(true)}>Results</button>
       </div>
     );
+  } else if (game.mode === 'replay') {
+    dock = (
+      <div className="dock-row">
+        <p className="hint"><b>Replay</b> · move {s.log.length} · {seat.name} to play</p>
+      </div>
+    );
   } else if (!isHuman) {
     dock = (
       <div className="dock-row">
-        <p className="hint"><span className="dot" style={{ background: playerCss(s.current) }} /> <b>{seat.name}</b> is thinking…</p>
+        <p className="hint">
+          <span className="dot" style={{ background: playerCss(s.current) }} /> <b>{seat.name}</b>{' '}
+          {seat.bot ? (seat.botControl ? 'is away, so a bot is playing…' : 'is thinking…') : seat.online === false ? 'has dropped out. Waiting for them to come back…' : 'is taking their turn…'}
+        </p>
+        {online && !seat.bot && seat.online === false && (seat.awayFor ?? 0) >= online.takeoverAfter && (
+          <div className="btns"><button type="button" className="primary" onClick={() => online.onTakeover(s.current)}>Let a bot play for {seat.name}</button></div>
+        )}
       </div>
     );
   } else if (s.step === 'place' && handDef) {
@@ -399,7 +429,7 @@ export function GameScreen({ saved, onQuit, onRematch }: { saved: SavedGame; onQ
         <div className="players" role="list" aria-label="Scores">
           {s.players.map((p) => (
             <div key={p.id} role="listitem" className={`player${p.id === s.current && s.step !== 'ended' ? ' current' : ''}`} style={{ '--pc': playerCss(p.id) } as React.CSSProperties}>
-              <span className="pname"><span className="dot" />{p.name}{seats[p.id]?.bot && <em> bot</em>}</span>
+              <span className="pname"><span className="dot" />{p.name}{seats[p.id]?.bot && <em> {seats[p.id]?.botControl ? (seats[p.id]?.resigned ? 'resigned' : 'bot playing') : 'bot'}</em>}{seats[p.id] && !seats[p.id].bot && seats[p.id].online === false && <em> away</em>}</span>
               <span className="pscore">{p.score}</span>
               <span className="pmeta">
                 <Pieces n={p.pieces.wanderer} grand={p.pieces.grand} color={playerCss(p.id)} />
@@ -432,7 +462,10 @@ export function GameScreen({ saved, onQuit, onRematch }: { saved: SavedGame; onQ
           <Toggle id="g-auto" label="Adjust automatically" checked={quality.auto} onChange={(v) => setQuality({ ...quality, auto: v })} />
           <p className="note"><span className="stats inline" ref={statsRef} data-level="good">– fps</span>{autoNote ? ` ${autoNote}.` : ''}</p>
           <div className="panel-row">
-            <button type="button" onClick={onQuit}>Save and quit</button>
+            {online && s.step !== 'ended' && !seats.find((x) => x.local)?.resigned && seats.some((x) => x.local) && (
+              <button type="button" onClick={() => { if (confirm('Resign? A bot finishes the game for you and you rank last.')) { online.onResign(); setMenu(false); } }}>Resign</button>
+            )}
+            <button type="button" onClick={onQuit}>{quitLabel}</button>
             <button type="button" onClick={() => setMenu(false)} className="primary">Close</button>
           </div>
         </div>
@@ -463,7 +496,7 @@ export function GameScreen({ saved, onQuit, onRematch }: { saved: SavedGame; onQ
             {rulesInPlay.length ? (
               <ul>
                 {rulesInPlay.map((r) => {
-                  const by = saved.drafted?.find((d) => d.rule === r!.id);
+                  const by = game.drafted?.find((d) => d.rule === r!.id);
                   return <li key={r!.id}><b>{r!.name}</b>{by ? <em> · picked by {seats[by.player]?.name}</em> : null}<br /><span>{r!.description}</span></li>;
                 })}
               </ul>
@@ -484,15 +517,21 @@ export function GameScreen({ saved, onQuit, onRematch }: { saved: SavedGame; onQ
                   <span className="rank">{s.winners?.includes(p.id) ? '👑' : i + 1}</span>
                   <span className="dot" />
                   <span className="pname">{p.name}</span>
+                  {(() => {
+                    const r = online?.result?.find((x) => x.seat === p.id);
+                    if (!r || r.ratingBefore === undefined || r.ratingAfter === undefined || !online?.rated) return null;
+                    const d = r.ratingAfter - r.ratingBefore;
+                    return <small className={`elo ${d > 0 ? 'up' : d < 0 ? 'down' : ''}`}>{r.ratingAfter} ({d >= 0 ? '+' : ''}{d})</small>;
+                  })()}
                   <b>{p.score}</b>
                 </li>
               ))}
             </ol>
-            <p className="note">{Object.keys(s.board).length} tiles on the board · {s.turn} turns</p>
+            <p className="note">{Object.keys(s.board).length} tiles on the board · {s.turn} turns{online ? (online.rated ? ' · rated game' : ' · unrated (needs two people)') : ''}</p>
             <div className="panel-row">
               <button type="button" onClick={() => setShowEnd(false)}>See the board</button>
-              <button type="button" onClick={onQuit}>New game</button>
-              <button type="button" className="primary" onClick={onRematch}>Play again</button>
+              <button type="button" onClick={onQuit}>{game.mode === 'local' ? 'New game' : quitLabel}</button>
+              {onRematch && <button type="button" className="primary" onClick={onRematch}>{rematchLabel}</button>}
             </div>
           </div>
         </div>
