@@ -245,7 +245,7 @@ span.board-chip { display: inline-flex; align-items: center; background: var(--c
   .players { max-width: calc(100% - 168px); }
   .top-right { gap: 5px; }
   .chip { padding: 0 8px; }
-  .top-right .chip:nth-child(2) { display: none; }
+  .top-right .turn-chip { display: none; }
   .title h1 { font-size: 34px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -318,7 +318,8 @@ span.board-chip { display: inline-flex; align-items: center; background: var(--c
 .row > span.rating, .row > span.presence { flex: none; }
 
 /* ---------- side panel: log, scores, tiles ---------- */
-.top-right .icon.on { background: var(--deep); color: #fff; border-color: #143559; box-shadow: 0 2px 0 #143559; }
+.top-right .deck-chip { color: inherit; cursor: pointer; }
+.top-right .icon.on, .top-right .deck-chip.on { background: var(--deep); color: #fff; border-color: #143559; box-shadow: 0 2px 0 #143559; }
 .top-right .icon svg { display: block; margin: auto; }
 .sidebar {
   position: absolute; z-index: 8; top: calc(8px + env(safe-area-inset-top, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px));

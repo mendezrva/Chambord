@@ -40,6 +40,9 @@ export function boundsOf(tiles: { x: number; z: number }[]) {
 }
 export type Bounds = ReturnType<typeof boundsOf>;
 
+/** Polar angle of the overhead view: a hair off vertical, so the heading stays defined while it spins. */
+const OVERHEAD_POLAR = 0.0001;
+
 /** Camera with touch-first controls and smooth moves between the three preset views. */
 export function CameraRig({ view, viewKey = 0, bounds, focus, closeTarget, minDistance = 9, keepVisible }: {
   view: View;
@@ -82,7 +85,16 @@ export function CameraRig({ view, viewKey = 0, bounds, focus, closeTarget, minDi
     const d = Math.max(minDistance, extent * 2.1) * Math.max(1, 0.95 / aspect);
     const animate = !first.current;
     first.current = false;
-    if (view === 'overhead') c.setLookAt(cx, d * 1.55, cz + 0.6, cx, 0, cz, animate);
+    // Overhead looks straight down and only spins; the other views can tilt again.
+    const top = view === 'overhead';
+    c.minPolarAngle = top ? 0 : 0.05;
+    c.maxPolarAngle = top ? OVERHEAD_POLAR : 1.38;
+    if (top) {
+      // Keep the current heading, so switching to overhead doesn't also spin the board.
+      c.setTarget(cx, 0, cz, animate);
+      c.rotatePolarTo(OVERHEAD_POLAR, animate);
+      c.dollyTo(d * 1.55, animate);
+    }
     if (view === 'isometric') c.setLookAt(cx + d * 0.85, d * 0.8, cz + d * 0.85, cx, 0, cz, animate);
     if (view === 'closeup') {
       const t = closeTarget ?? { x: 0, z: 0 };
@@ -127,11 +139,12 @@ export function CameraRig({ view, viewKey = 0, bounds, focus, closeTarget, minDi
       probe.updateMatrixWorld();
       if (fits(probe)) break;
     }
-    const p = target.clone().addScaledVector(dir, d);
-    c.setLookAt(p.x, p.y, p.z, target.x, target.y, target.z, true);
+    // Move and back off without changing heading or tilt (setLookAt would lose the heading when looking straight down).
+    c.moveTo(target.x, target.y, target.z, true);
+    c.dollyTo(d, true);
   }
 
-  return <CameraControls ref={ref} makeDefault minDistance={1.5} maxDistance={80} minPolarAngle={0.05} maxPolarAngle={1.38} />;
+  return <CameraControls ref={ref} makeDefault minDistance={1.5} maxDistance={80} minPolarAngle={view === 'overhead' ? 0 : 0.05} maxPolarAngle={view === 'overhead' ? OVERHEAD_POLAR : 1.38} />;
 }
 
 /** Debug hook for automated tests: window.__project(x, y, z) gives the screen point of a world point. */

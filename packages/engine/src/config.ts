@@ -187,6 +187,19 @@ export function normalize(c: GameConfig): GameConfig {
   return c;
 }
 
+/**
+ * Brings a config saved by an older version up to today's rules. Fields are part of every game
+ * now, so a game saved before that turns them on, unless a player drafted Town Folk or the
+ * builder set them to Off. Adding a scoring option never makes a saved move illegal, so the log still replays.
+ */
+export function upgradeConfig(c: GameConfig): GameConfig {
+  const m = (c.scoring.meadow ??= { ...DEFAULT_SCORING.meadow });
+  if (typeof m.perTown !== 'number') m.perTown = DEFAULT_SCORING.meadow.perTown;
+  // A builder that set fields to "Off" (0 per town) meant it; anything else plays with fields.
+  if (m.perTown > 0 && !(c.draftRules ?? []).includes('noFields')) m.enabled = true;
+  return c;
+}
+
 export const isRiver = (c: GameConfig, id: string) => c.tiles[id]?.edges.includes('river') ?? false;
 
 export const PRESETS: Record<string, GameOptions & { name: string; description: string }> = {
