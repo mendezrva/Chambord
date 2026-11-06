@@ -6,8 +6,10 @@ import { GameScreen } from './ui/GameScreen';
 import { Setup, optionsFor, type Builder } from './ui/Setup';
 import { Draft } from './ui/Draft';
 import { Online } from './ui/Online';
+import { Intro } from './intro/Intro';
 
 type Screen =
+  | { kind: 'intro' }
   | { kind: 'setup' }
   | { kind: 'draft'; builder: Builder }
   | { kind: 'game'; saved: SavedGame; n: number }
@@ -31,9 +33,12 @@ export default function App() {
     const q = new URLSearchParams(location.search);
     if (q.has('styletest')) return { kind: 'style' };
     if (q.has('join') || q.has('online')) return { kind: 'online', join: q.get('join')?.toUpperCase() ?? null };
-    return { kind: 'setup' };
+    // The title page and flyover play on every load; ?nointro goes straight to the game builder.
+    return q.has('nointro') ? { kind: 'setup' } : { kind: 'intro' };
   });
   const [save, setSave] = useState(loadSave);
+
+  if (screen.kind === 'intro') return <Intro onDone={() => setScreen({ kind: 'setup' })} />;
 
   if (screen.kind === 'online') return <Online joinCode={screen.join} onBack={() => setScreen({ kind: 'setup' })} />;
 
