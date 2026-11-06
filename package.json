@@ -1,10 +1,14 @@
 {
   "name": "glockenfels",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "npm run dev -w apps/client",
     "build": "npm run build -w apps/client",
-    "typecheck": "npm run typecheck -w apps/client"
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test -w packages/engine"
   }
 }
