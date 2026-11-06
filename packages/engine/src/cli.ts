@@ -2,7 +2,7 @@
  * Command-line runner: plays a bot game and prints the turns and the final scores.
  *
  *   npm run play -w packages/engine -- --preset party --players 4 --seed 7
- *   npm run play -w packages/engine -- --modules riverlands,actions --rules bigTowns,farmers --quiet
+ *   npm run play -w packages/engine -- --modules riverlands,actions --rules bigTowns,harvest --quiet
  */
 import { buildConfig, PRESETS, type GameOptions } from './config';
 import { botAction } from './bot';

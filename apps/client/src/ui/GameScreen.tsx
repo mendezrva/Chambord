@@ -14,13 +14,24 @@ import { TILE } from '../tiles/buildTile';
 import { PALETTE } from '../tiles/palette';
 import { Clouds, Lights, Mountains } from '../scene/World';
 import { Confetti } from '../scene/Confetti';
-import { BoardTiles, ClaimSpots, GhostTile, playerColor, playerCss, Popups, SpotMarkers, usePieces, useTiles, Wanderers, type PieceItem, type Popup } from '../scene/GameBoard';
+import { BoardTiles, ClaimSpots, FeatureIcon, GhostTile, playerColor, playerCss, Popups, SpotMarkers, usePieces, useTiles, Wanderers, type PieceItem, type Popup } from '../scene/GameBoard';
 import { boundsOf, CameraRig, declineQuality, defaultQuality, Effects, ProjectHook, reducedMotion, Stats, type Quality, type View } from '../scene/Stage';
 import type { GameController } from '../game/session';
 import type { ResultRow } from '@glockenfels/protocol';
 import { featureLabel } from '../game/tiles3d';
 import { ACTION_INFO, ActionCard, TileCard } from './TileCard';
 import { Toggle } from './Overlay';
+import { Sidebar, useHistory, type SideTab } from './Sidebar';
+
+const PREFS_KEY = 'glockenfels.prefs.v1';
+interface Prefs { side: boolean; tab: SideTab; markers: boolean }
+function loadPrefs(): Prefs {
+  const wide = typeof window !== 'undefined' && window.innerWidth >= 1000;
+  const d: Prefs = { side: wide, tab: 'log', markers: true };
+  try { return { ...d, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') }; } catch { return d; }
+}
+/** A short buzz on Android; iOS Safari ignores it. */
+const buzz = (ms = 12) => { try { navigator.vibrate?.(ms); } catch { /* not supported */ } };
 
 const VIEWS: { id: View; label: string }[] = [
   { id: 'overhead', label: 'Overhead' },
@@ -73,6 +84,14 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
   const [viewKey, setViewKey] = useState(0);
   const [focus, setFocus] = useState<{ x: number; z: number; n: number } | null>(null);
   const [menu, setMenu] = useState(false);
+  const [prefs, setPrefsState] = useState<Prefs>(loadPrefs);
+  const setPrefs = (p: Partial<Prefs>) => setPrefsState((o) => {
+    const n = { ...o, ...p };
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(n)); } catch { /* ignore */ }
+    return n;
+  });
+  const history = useHistory(game, prefs.side);
+  const [highlight, setHighlight] = useState<string | null>(null);
   const statsRef = useRef<HTMLSpanElement>(null);
   const onDecline = useCallback(() => setQuality((q) => { const r = declineQuality(q); if (r.note) setAutoNote(r.note); return r.q; }), []);
 
@@ -124,9 +143,17 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
   const pickSpot = (x: number, z: number) => {
     const rots = fits.get(`${x},${z}`);
     if (!rots) return;
+    // Tapping the chosen spot again turns the tile, like tapping the tile itself.
+    if (spot && spot[0] === x && spot[1] === z) { turnTile(); return; }
+    buzz(8);
     setSpot([x, z]);
     setRot(rots.includes(rot) ? rot : rots[0]);
   };
+  // Only one place it can go: put it there straight away; the player still turns and confirms.
+  useEffect(() => {
+    if (isHuman && s.step === 'place' && !spot && cells.length === 1) pickSpot(cells[0][0], cells[0][1]);
+  }, [cells, isHuman]); // eslint-disable-line react-hooks/exhaustive-deps
+  const spotWays = spot ? (fits.get(`${spot[0]},${spot[1]}`) ?? []).length : 0;
   const turnTile = () => {
     if (!spot) { setRot((r) => (r + 1) % 4); return; }
     const rots = fits.get(`${spot[0]},${spot[1]}`) ?? [];
@@ -135,13 +162,17 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
   };
   const confirmPlace = () => {
     if (!spot) return;
+    buzz(15);
     dispatch({ type: 'place', hand: Math.min(handIdx, s.hand.length - 1), x: spot[0], z: spot[1], rot });
   };
 
   const claimOptions = useMemo(() => {
     if (s.step !== 'claim' || !last) return [];
     const a = tileAnalysis(s, last);
-    const opts = claimable(s).map((local) => ({ local, kind: a.features[local].kind, label: featureLabel(a.features[local].kind) }));
+    const order = ['town', 'road', 'monastery', 'meadow'];
+    const opts = claimable(s)
+      .map((local) => ({ local, kind: a.features[local].kind as string, label: featureLabel(a.features[local].kind) }))
+      .sort((x, y) => order.indexOf(x.kind) - order.indexOf(y.kind));
     // Number repeats ("Road 1", "Road 2") so each chip is distinct.
     const count = new Map<string, number>();
     for (const o of opts) count.set(o.kind, (count.get(o.kind) ?? 0) + 1);
@@ -154,7 +185,8 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
     });
   }, [s, version, last]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const claim = (piece: PieceType) => { if (claimSel !== null) dispatch({ type: 'claim', local: claimSel, piece }); };
+  const claim = (piece: PieceType) => { if (claimSel !== null) { buzz(15); dispatch({ type: 'claim', local: claimSel, piece }); } };
+  const pickClaim = (local: number) => { buzz(8); setClaimSel(local); };
 
   const legal = useMemo(() => (s.step === 'action' ? legalActions(s) : []), [s, version]); // eslint-disable-line react-hooks/exhaustive-deps
   const actionTargets = (kind: ActionKind) => legal.filter((a): a is Extract<Action, { type: 'playAction' }> => a.type === 'playAction' && a.action === kind);
@@ -208,6 +240,12 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
         case 'skipped': toast(`${nameOf(e.player)} misses a turn`); break;
         case 'discarded': toast(e.reason === 'unplayable' ? 'A tile that fits nowhere was set aside' : 'Action hand full, so the action tile was discarded'); break;
         case 'goods': toast(`${nameOf(e.player)} takes the ${e.good}`); break;
+        case 'claimed': {
+          const id = `${e.tileKey}:${e.local}`;
+          setHighlight(id);
+          setTimeout(() => setHighlight((h) => (h === id ? null : h)), 4500);
+          break;
+        }
         case 'ended': setTimeout(() => setShowEnd(true), add.length ? 2200 : 900); break;
       }
     }
@@ -258,6 +296,7 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
   // Debug hook for automated tests.
   (window as unknown as { __glock?: unknown }).__glock = { s, dispatch, undo, seats };
   (window as unknown as { __fits?: unknown }).__fits = cells;
+  (window as unknown as { __pick?: unknown }).__pick = () => cells[0] && pickSpot(cells[0][0], cells[0][1]);
 
   const cycleView = (v: View) => { setView(v); setViewKey((k) => k + 1); };
   const hidden = curtain !== null;
@@ -302,36 +341,40 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
           ))}
         </div>
         <div className="hint-col">
-          <p className="hint"><b>{handDef.name}</b></p>
+          <p className="hint title-hint">{handDef.name}</p>
           <p className="hint small">
             {s.mustPlace > 1 ? 'Draw Two: place this, then one more. ' : ''}
-            {spot ? 'Tap the tile to turn it, then place it.' : `Tap a glowing spot (${cells.length}).`}
+            {spot
+              ? spotWays > 1 ? `Fits ${spotWays} ways here. Tap the tile to turn it.` : 'Fits one way here.'
+              : cells.length === 1 ? 'Only one spot fits.' : `Tap one of the ${cells.length} glowing spots.`}
           </p>
         </div>
         <div className="btns">
-          <button type="button" onClick={turnTile} aria-label="Turn tile">⟳ Turn</button>
-          <button type="button" className="primary" disabled={!spot} onClick={confirmPlace}>Place</button>
+          <button type="button" onClick={turnTile} aria-label="Turn tile" disabled={!!spot && spotWays < 2}><span className="btn-ico">⟳</span> Turn</button>
+          <button type="button" className="primary" disabled={!spot} onClick={confirmPlace}>{spot ? 'Place tile' : 'Pick a spot'}</button>
         </div>
       </div>
     );
   } else if (s.step === 'claim') {
-    const selKind = claimOptions.find((o) => o.local === claimSel);
+    const sel = claimOptions.find((o) => o.local === claimSel);
     dock = (
       <div className="dock-row">
         <div className="hint-col">
-          <p className="hint"><b>Send out a Wanderer?</b> <Pieces n={me.pieces.wanderer} grand={me.pieces.grand} color={playerCss(s.current)} /></p>
-          <p className="hint small">{selKind ? `On the ${selKind.label.toLowerCase()}.` : 'Pick a feature of the new tile.'}</p>
+          <p className="hint title-hint">Send out a Wanderer? <Pieces n={me.pieces.wanderer} grand={me.pieces.grand} color={playerCss(s.current)} /></p>
+          <p className="hint small">{sel ? (sel.kind === 'meadow' ? 'Field Wanderers stay out until the game ends.' : `On the ${sel.label.toLowerCase()}. They come home when it is finished.`) : 'Tap a spot on the new tile, or pick one here.'}</p>
         </div>
         <div className="claim-opts" role="group" aria-label="Feature to claim">
           {claimOptions.map((o) => (
-            <button key={o.local} type="button" aria-pressed={claimSel === o.local} onClick={() => setClaimSel(o.local)}>{o.label}</button>
+            <button key={o.local} type="button" className="claim-opt" aria-pressed={claimSel === o.local} onClick={() => pickClaim(o.local)}>
+              <FeatureIcon kind={o.kind} />{o.label}
+            </button>
           ))}
         </div>
         <div className="btns">
-          <button type="button" onClick={undo}>Undo</button>
-          <button type="button" onClick={() => dispatch({ type: 'pass' })}>No thanks</button>
-          {me.pieces.grand > 0 && <button type="button" disabled={claimSel === null} onClick={() => claim('grand')}>Grand</button>}
-          <button type="button" className="primary" disabled={claimSel === null || me.pieces.wanderer <= 0} onClick={() => claim('wanderer')}>Wanderer</button>
+          <button type="button" onClick={undo} aria-label="Take the tile back">↶ Undo</button>
+          <button type="button" onClick={() => dispatch({ type: 'pass' })}>Skip</button>
+          {sel && me.pieces.grand > 0 && <button type="button" onClick={() => claim('grand')}>Grand</button>}
+          {sel && me.pieces.wanderer > 0 && <button type="button" className="primary" onClick={() => claim('wanderer')}>Send Wanderer</button>}
         </div>
       </div>
     );
@@ -387,7 +430,7 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
   };
 
   return (
-    <div className="app game">
+    <div className={`app game${prefs.side ? ' with-side' : ''}`}>
       <Canvas
         className="scene"
         shadows={quality.shadows ? 'soft' : false}
@@ -406,15 +449,15 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
           <Mountains />
           <Clouds extent={bounds.extent} />
           <BoardTiles tiles={tiles} bounce={bounce} shadows={quality.shadows} />
-          <Wanderers pieces={pieces} shadows={quality.shadows} pickable={sendHomePick ? (p) => p.player !== s.current : undefined} onPick={onPickPiece} />
+          <Wanderers pieces={pieces} shadows={quality.shadows} markers={prefs.markers} highlight={highlight} pickable={sendHomePick ? (p) => p.player !== s.current : undefined} onPick={onPickPiece} />
           {isHuman && !hidden && s.step === 'place' && handDef && (
             <>
               <SpotMarkers cells={cells} selected={spot} color={color} onPick={pickSpot} />
-              {spot && <GhostTile def={handDef} rot={rot} x={spot[0]} z={spot[1]} s={s} onTap={turnTile} color={color} />}
+              {spot && <GhostTile def={handDef} rot={rot} x={spot[0]} z={spot[1]} s={s} onTap={turnTile} color={color} ways={spotWays} onConfirm={confirmPlace} onCancel={cells.length > 1 ? () => setSpot(null) : undefined} />}
             </>
           )}
           {isHuman && !hidden && s.step === 'claim' && (
-            <ClaimSpots s={s} options={claimOptions} selected={claimSel} color={color} player={s.current} onPick={setClaimSel} />
+            <ClaimSpots s={s} options={claimOptions} selected={claimSel} color={color} player={s.current} onPick={pickClaim} />
           )}
           <Confetti at={party} />
           <Popups items={popups} />
@@ -442,6 +485,9 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
         <div className="top-right">
           <span className="chip" title="Tiles left in the deck">▦ {deckLeft}</span>
           {s.players.length > 2 && <span className="chip" title="Turn order">{s.direction === 1 ? '↻' : '↺'}</span>}
+          <button type="button" className={`icon${prefs.side ? ' on' : ''}`} aria-expanded={prefs.side} aria-label="Play log, scores and tiles" title="Play log, scores and tiles" onClick={() => setPrefs({ side: !prefs.side })}>
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 4h11l3 3v13H5z M8 9h8 M8 13h8 M8 17h5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
           <button type="button" className="icon" aria-expanded={menu} aria-label="Menu" onClick={() => setMenu(!menu)}>☰</button>
         </div>
       </header>
@@ -456,6 +502,7 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
             {VIEWS.map((v) => <button key={v.id} type="button" aria-pressed={view === v.id} onClick={() => cycleView(v.id)}>{v.label}</button>)}
           </div>
           <button type="button" onClick={() => { setRuleCard(true); setMenu(false); }}>Rule card</button>
+          <Toggle id="g-markers" label="Markers over Wanderers" checked={prefs.markers} onChange={(v) => setPrefs({ markers: v })} />
           <Toggle id="g-shadows" label="Shadows" checked={quality.shadows} onChange={(v) => setQuality({ ...quality, shadows: v })} />
           <Toggle id="g-ao" label="Ambient occlusion" checked={quality.ao} onChange={(v) => setQuality({ ...quality, ao: v, auto: false })} />
           <Toggle id="g-tilt" label="Tilt-shift blur" checked={quality.tiltShift} onChange={(v) => setQuality({ ...quality, tiltShift: v, auto: false })} />
@@ -477,6 +524,8 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
         </div>
         {!hidden && <div className="turn-panel" style={{ '--pc': playerCss(s.current) } as React.CSSProperties}>{dock}</div>}
       </nav>
+
+      {prefs.side && !hidden && <Sidebar s={s} history={history} tab={prefs.tab} onTab={(tab) => setPrefs({ tab })} onClose={() => setPrefs({ side: false })} />}
 
       {curtain !== null && (
         <div className="curtain" style={{ '--pc': playerCss(curtain) } as React.CSSProperties}>

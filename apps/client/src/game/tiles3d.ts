@@ -104,5 +104,5 @@ export function featureSpots(def: TileDef, rot: number, built: BuiltTile): V2[] 
 /** World position of a tile cell. */
 export const cellToWorld = (x: number, z: number): V2 => [x * TILE, z * TILE];
 
-const LABEL: Record<string, string> = { road: 'Road', town: 'Town', monastery: 'Monastery', meadow: 'Meadow' };
+const LABEL: Record<string, string> = { road: 'Road', town: 'Town', monastery: 'Monastery', meadow: 'Field' };
 export const featureLabel = (kind: string) => LABEL[kind] ?? kind;

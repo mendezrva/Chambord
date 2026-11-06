@@ -9,6 +9,7 @@ export interface ScoringConfig {
   road: { perTile: number; incompletePerTile: number; /** Roads at least this long score double (0 = off). */ doubleFrom: number };
   town: { perTile: number; perBanner: number; incompletePerTile: number; incompletePerBanner: number; beerGardenPerTile: number };
   monastery: { complete: number; incompletePerTile: number; hopGardenBonus: number };
+  /** Fields (meadows): Wanderers lying in a field score per completed town it touches, at game end. */
   meadow: { enabled: boolean; perTown: number };
   market: { enabled: boolean; mostOfGood: number };
 }
@@ -48,7 +49,7 @@ export const DEFAULT_SCORING: ScoringConfig = {
   road: { perTile: 1, incompletePerTile: 1, doubleFrom: 0 },
   town: { perTile: 2, perBanner: 2, incompletePerTile: 1, incompletePerBanner: 1, beerGardenPerTile: 0 },
   monastery: { complete: 9, incompletePerTile: 1, hopGardenBonus: 0 },
-  meadow: { enabled: false, perTown: 3 },
+  meadow: { enabled: true, perTown: 3 },
   market: { enabled: false, mostOfGood: 10 },
 };
 
@@ -111,7 +112,8 @@ export const DRAFT_RULES: RuleLike[] = [
   { id: 'quickGame', name: 'Quick Game', description: 'Only 40 tiles in the deck.', conflicts: ['marathon'], apply: (c) => { c.deckLimit = 40; } },
   { id: 'marathon', name: 'Marathon', description: 'The deck is doubled.', conflicts: ['quickGame'], apply: (c) => { c.deckMultiplier = 2; } },
   { id: 'firstTo100', name: 'First to 100', description: 'The game ends as soon as someone reaches 100 points.', conflicts: [], apply: (c) => { c.end.targetScore = 100; } },
-  { id: 'farmers', name: 'Farmers', description: 'Meadows score 3 per completed town they touch at game end.', conflicts: [], apply: (c) => { c.scoring.meadow.enabled = true; } },
+  { id: 'harvest', name: 'Bumper Harvest', description: 'Fields score 4 per completed town instead of 3.', conflicts: ['noFields'], apply: (c) => { c.scoring.meadow.perTown = 4; } },
+  { id: 'noFields', name: 'Town Folk', description: 'No Wanderers in fields; fields never score.', conflicts: ['harvest'], apply: (c) => { c.scoring.meadow.enabled = false; } },
   { id: 'proudBanners', name: 'Proud Banners', description: 'Banners are worth 4.', conflicts: [], apply: (c) => { c.scoring.town.perBanner = 4; } },
   { id: 'chaos', name: 'Chaos', description: 'Action tiles appear twice as often.', conflicts: ['peacefulValley'], apply: (c) => { c.actionMultiplier = 2; } },
   { id: 'peacefulValley', name: 'Peaceful Valley', description: 'No action tiles.', conflicts: ['chaos', 'actions'], apply: (c) => { c.rules.actions = false; } },
@@ -165,6 +167,8 @@ export function buildConfig(o: GameOptions): GameConfig {
 export function normalize(c: GameConfig): GameConfig {
   c.pieces.wanderer = Math.max(1, Math.floor(c.pieces.wanderer));
   c.pieces.grand = Math.max(0, Math.floor(c.pieces.grand));
+  // Fields worth nothing are switched off, so nobody can strand a Wanderer in one.
+  if (c.scoring.meadow.perTown <= 0) c.scoring.meadow.enabled = false;
   for (const d of c.deck) d.count = Math.max(0, Math.floor(d.count));
   if (!c.rules.actions) c.deck = c.deck.filter((d) => !c.tiles[d.tileId]?.action);
   else for (const d of c.deck) if (c.tiles[d.tileId]?.action) d.count *= c.actionMultiplier;

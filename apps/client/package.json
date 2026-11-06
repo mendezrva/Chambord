@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource-variable/fraunces": "5.2.8",
+    "@fontsource-variable/nunito": "5.2.7",
     "@glockenfels/engine": "*",
     "@glockenfels/protocol": "*",
     "@react-three/drei": "9.114.0",

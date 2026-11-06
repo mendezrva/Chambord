@@ -32,3 +32,36 @@ export function wandererGeometry(color: number) {
   cache.set(color, g);
   return g;
 }
+
+const baseCache = new Map<number, THREE.BufferGeometry>();
+/** A chunky stepped plinth under a placed Wanderer: a white rim and a disc in the player's colour, so it reads from any angle. */
+export function wandererBaseGeometry(color: number) {
+  const hit = baseCache.get(color);
+  if (hit) return hit;
+  const g = mergeGeometries([
+    part(new THREE.CylinderGeometry(0.2, 0.22, 0.05, 10), 0xfffaf0, 0, 0.025, 0),
+    part(new THREE.CylinderGeometry(0.16, 0.18, 0.04, 10), color, 0, 0.06, 0),
+  ])!;
+  baseCache.set(color, g);
+  return g;
+}
+
+/** A faceted gem that floats over each Wanderer, so a piece hidden between houses can still be found. */
+export const markerGeometry = (() => {
+  const g = new THREE.OctahedronGeometry(0.14, 0);
+  g.scale(1, 1.5, 1);
+  return g;
+})();
+
+const markerMats = new Map<number, THREE.MeshStandardMaterial>();
+export function markerMaterial(color: number) {
+  let m = markerMats.get(color);
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35, flatShading: true, roughness: 0.35, metalness: 0.1 });
+    markerMats.set(color, m);
+  }
+  return m;
+}
+
+/** A white back-face shell around the gem, so a red marker still stands out against red roofs. */
+export const markerOutlineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide });
