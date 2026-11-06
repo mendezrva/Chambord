@@ -1,0 +1,109 @@
+/* Title page and flyover. Uses the shared type tokens when they exist, with local fallbacks. */
+.intro {
+  --i-display: var(--font-display, "Fraunces Variable", Georgia, serif);
+  --i-deep: var(--deep, #1f4f86);
+  --i-paper: var(--paper, #fffaf0);
+  --i-ink: var(--ink, #23302a);
+  position: absolute; inset: 0; overflow: hidden; background: #dde9f3;
+  transition: opacity 0.38s ease, transform 0.38s ease;
+}
+.intro.leaving { opacity: 0; transform: scale(1.03); }
+
+/* A soft fade from the sky colour at load, on skip and on replay. */
+.intro-veil { position: absolute; inset: 0; background: #dde9f3; pointer-events: none; animation: intro-veil 0.9s ease-out forwards; }
+@keyframes intro-veil { from { opacity: 1; } to { opacity: 0; } }
+
+/* Gentle vignette so the white title reads over the bright sky. */
+.intro::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 80% at 50% 45%, transparent 55%, rgba(20, 40, 60, 0.18) 100%);
+}
+
+.intro-caption {
+  position: absolute; left: 0; right: 0; bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  display: flex; justify-content: center; padding: 0 24px; pointer-events: none; z-index: 2;
+}
+.intro-caption p {
+  margin: 0; font: italic 600 clamp(20px, 5.4vw, 30px)/1.2 var(--i-display); font-variation-settings: "SOFT" 100, "opsz" 48;
+  color: #fff; text-align: center; letter-spacing: 0.005em;
+  text-shadow: 0 1px 0 rgba(31, 79, 134, 0.55), 0 2px 18px rgba(20, 40, 60, 0.45);
+  animation: intro-caption 2.8s ease both;
+}
+.intro-caption p.big { font-size: clamp(40px, 12vw, 64px); font-style: normal; font-weight: 800; animation-name: intro-prost; }
+@keyframes intro-caption {
+  0% { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  14%, 82% { opacity: 1; transform: none; filter: none; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+@keyframes intro-prost {
+  0% { opacity: 0; transform: scale(0.6) rotate(-6deg); }
+  12% { opacity: 1; transform: scale(1.12) rotate(2deg); }
+  20% { transform: scale(1) rotate(0); }
+  84% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+
+.intro-title {
+  position: absolute; left: 0; right: 0; top: calc(9vh + env(safe-area-inset-top, 0px));
+  display: grid; justify-items: center; gap: 6px; text-align: center; padding: 0 20px; pointer-events: none; z-index: 2;
+}
+.intro-title > * { opacity: 0; transform: translateY(14px); transition: opacity 0.9s ease, transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.intro-title.shown > * { opacity: 1; transform: none; }
+.intro-title.shown > :nth-child(2) { transition-delay: 0.15s; }
+.intro-title.shown > :nth-child(3) { transition-delay: 0.45s; }
+.intro-title.shown > :nth-child(4) { transition-delay: 0.6s; }
+.intro-kicker {
+  font: 700 13px/1 var(--font, system-ui); letter-spacing: 0.32em; text-transform: uppercase; color: var(--i-deep);
+  background: rgba(255, 250, 240, 0.82); padding: 7px 12px 6px 15px; border-radius: 999px;
+}
+.intro-title h1 {
+  margin: 2px 0 0; font: 800 clamp(48px, 14.5vw, 104px)/0.95 var(--i-display);
+  font-variation-settings: "SOFT" 100, "WONK" 1, "opsz" 144; letter-spacing: -0.015em; color: var(--i-paper);
+  /* A chunky stacked edge like the side of a tile slab, then a soft drop shadow. */
+  text-shadow:
+    0 1px 0 #2a64a3, 0 2px 0 #275e9a, 0 3px 0 #245892, 0 4px 0 #21528a, 0 5px 0 var(--i-deep),
+    0 6px 1px rgba(0, 0, 0, 0.12), 0 10px 24px rgba(20, 40, 60, 0.35);
+}
+.intro-rauten {
+  width: min(220px, 52vw); height: 12px; border-radius: 3px; margin-top: 6px;
+  background:
+    linear-gradient(135deg, var(--blue, #2f74c0) 25%, transparent 25%) 0 0 / 16px 12px,
+    linear-gradient(225deg, var(--blue, #2f74c0) 25%, transparent 25%) 0 0 / 16px 12px,
+    linear-gradient(315deg, var(--blue, #2f74c0) 25%, transparent 25%) 0 0 / 16px 12px,
+    linear-gradient(45deg, var(--blue, #2f74c0) 25%, transparent 25%) 0 0 / 16px 12px,
+    #fff;
+  box-shadow: 0 2px 8px rgba(20, 40, 60, 0.25);
+}
+.intro-title p {
+  margin: 6px 0 0; font: italic 600 clamp(17px, 4.6vw, 22px)/1.25 var(--i-display); font-variation-settings: "SOFT" 100;
+  color: var(--i-deep); text-shadow: 0 0 10px rgba(255, 255, 255, 0.9), 0 0 2px #fff;
+}
+
+.intro-actions {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: grid; justify-items: center; gap: 6px;
+  padding: 0 20px calc(22px + env(safe-area-inset-bottom, 0px));
+}
+.intro-play {
+  min-width: min(280px, 100%); min-height: 58px; border-radius: 999px; border: 0;
+  font: 800 22px/1 var(--i-display); font-variation-settings: "SOFT" 100; letter-spacing: 0.02em;
+  color: #fff; background: linear-gradient(180deg, #3a83d1, var(--blue, #2f74c0));
+  box-shadow: 0 5px 0 var(--i-deep), 0 12px 24px rgba(20, 40, 60, 0.35);
+  animation: intro-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.intro-play:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--i-deep), 0 6px 14px rgba(20, 40, 60, 0.3); }
+.intro-link {
+  min-height: 44px; background: none; border: 0; backdrop-filter: none; -webkit-backdrop-filter: none;
+  font: 700 15px var(--font, system-ui); color: #fff; text-shadow: 0 1px 8px rgba(20, 40, 60, 0.6);
+  animation: intro-rise 0.6s 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.intro-skip {
+  justify-self: end; min-height: 44px; padding: 0 18px; border-radius: 999px;
+  font: 700 14px var(--font, system-ui); letter-spacing: 0.04em; color: var(--i-ink);
+  background: rgba(255, 250, 240, 0.72);
+}
+@keyframes intro-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-caption p, .intro-play, .intro-link { animation-duration: 0.01s; }
+  .intro-title > * { transition-duration: 0.01s; }
+}
