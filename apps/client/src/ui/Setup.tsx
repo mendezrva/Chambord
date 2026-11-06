@@ -10,7 +10,7 @@ import {
 } from '@glockenfels/engine';
 import type { Seat } from '../game/session';
 import { playerCss } from '../scene/GameBoard';
-import { TileCard } from './TileCard';
+import { describeTile, TileCard } from './TileCard';
 import { Toggle } from './Overlay';
 
 export interface Builder {
@@ -36,7 +36,11 @@ export function defaultBuilder(): Builder {
 export function loadBuilder(): Builder {
   try {
     const b = JSON.parse(localStorage.getItem(BUILDER_KEY) ?? 'null') as Builder | null;
-    if (b && Array.isArray(b.seats) && b.seats.length >= 2) return { ...defaultBuilder(), ...b };
+    if (b && Array.isArray(b.seats) && b.seats.length >= 2) {
+      // Drop modules and rules this version no longer has (e.g. Farmers, now part of the base game).
+      const known = (ids: unknown, list: { id: string }[]) => (Array.isArray(ids) ? ids.filter((id) => list.some((r) => r.id === id)) : []);
+      return { ...defaultBuilder(), ...b, modules: known(b.modules, MODULES), rules: known(b.rules, DRAFT_RULES) };
+    }
   } catch { /* fall through */ }
   return defaultBuilder();
 }
@@ -50,7 +54,7 @@ const GAME_FIELDS: Field[] = [
   { path: 'end.turnLimit', label: 'Turn limit', min: 0, max: 300, step: 5, zero: 'Off' },
   { path: 'turn.actionHandSize', label: 'Action tiles you can hold', min: 1, max: 4, show: (c) => c.rules.actions },
 ];
-const SCORE_FIELDS: { group: string; fields: Field[] }[] = [
+const SCORE_FIELDS: { group: string; note?: string; fields: Field[] }[] = [
   { group: 'Roads', fields: [
     { path: 'scoring.road.perTile', label: 'Complete, per tile', min: 0, max: 10 },
     { path: 'scoring.road.incompletePerTile', label: 'Unfinished, per tile', min: 0, max: 10 },
@@ -68,8 +72,10 @@ const SCORE_FIELDS: { group: string; fields: Field[] }[] = [
     { path: 'scoring.monastery.incompletePerTile', label: 'Unfinished, per tile', min: 0, max: 5 },
     { path: 'scoring.monastery.hopGardenBonus', label: 'Per hop garden nearby', min: 0, max: 5, show: (c) => c.modules.includes('hopGardens') },
   ] },
-  { group: 'Meadows and market', fields: [
-    { path: 'scoring.meadow.perTown', label: 'Meadow, per finished town', min: 0, max: 10, show: (c) => c.scoring.meadow.enabled },
+  { group: 'Fields', note: 'Scored at game end: a Wanderer lying in a field earns points for every completed town the field touches.', fields: [
+    { path: 'scoring.meadow.perTown', label: 'Per completed town', min: 0, max: 10, zero: 'Off', show: (c) => !c.draftRules.includes('noFields') },
+  ] },
+  { group: 'Market Day', fields: [
     { path: 'scoring.market.mostOfGood', label: 'Most of a good', min: 0, max: 30, show: (c) => c.scoring.market.enabled },
   ] },
 ];
@@ -200,16 +206,16 @@ export function Setup({ onStart, onResume, canResume = false, onStyleTest, onOnl
     if (!cfg || (f.show && !f.show(cfg))) return null;
     const v = (b.edits[f.path] ?? getPath(cfg, f.path)) as number;
     return (
-      <div className="row" key={f.path}>
-        <span>{f.label}{b.edits[f.path] !== undefined && <em className="edited"> edited</em>}</span>
+      <div className="row field-row" key={f.path}>
+        <span className="row-label">{f.label}{b.edits[f.path] !== undefined && <em className="edited">edited</em>}</span>
         <Stepper label={f.label} value={v} min={f.min} max={f.max} step={f.step} zero={f.zero} onChange={(n) => setEdit(f.path, n)} />
       </div>
     );
   };
   const tileRow = (t: (typeof ALL_TILES)[number]) => (
-    <div className="row tile-row" key={t.id}>
-      <TileCard def={t} small />
-      <span>{t.name}</span>
+    <div className={`tile-row${count(t.id) ? '' : ' none'}`} key={t.id}>
+      <TileCard def={t} />
+      <span className="tile-text"><b>{t.name}</b><small>{describeTile(t)}</small></span>
       <Stepper label={t.name} value={count(t.id)} min={0} max={20} onChange={(n) => setEdit(`deck.${t.id}`, n)} />
     </div>
   );
@@ -309,7 +315,7 @@ export function Setup({ onStart, onResume, canResume = false, onStyleTest, onOnl
           {landTiles.map(tileRow)}
           {b.modules.includes('riverlands') && <><h3>River</h3>{riverTiles.map(tileRow)}</>}
           {b.modules.includes('actions') && <><h3>Action tiles</h3>{actionTiles.map((t) => (
-            <div className="row" key={t.id}><span>{t.name}</span><Stepper label={t.name} value={count(t.id)} min={0} max={10} onChange={(n) => setEdit(`deck.${t.id}`, n)} /></div>
+            <div className="row field-row" key={t.id}><span className="row-label">{t.name}</span><Stepper label={t.name} value={count(t.id)} min={0} max={10} onChange={(n) => setEdit(`deck.${t.id}`, n)} /></div>
           ))}</>}
           <button type="button" onClick={resetTiles}>Reset tile counts</button>
         </Section>
@@ -317,7 +323,7 @@ export function Setup({ onStart, onResume, canResume = false, onStyleTest, onOnl
         <Section title="Scoring" summary={edited ? 'Edited' : 'Standard'}>
           {SCORE_FIELDS.map((g) => {
             const rows = g.fields.map(fieldRow).filter(Boolean);
-            return rows.length ? <div key={g.group}><h3>{g.group}</h3>{rows}</div> : null;
+            return rows.length ? <div key={g.group} className="field-group"><h3>{g.group}</h3>{g.note && <p className="note">{g.note}</p>}{rows}</div> : null;
           })}
           <button type="button" onClick={resetScoring}>Reset scoring</button>
         </Section>

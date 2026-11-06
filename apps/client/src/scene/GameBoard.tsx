@@ -11,7 +11,7 @@ import { TILE } from '../tiles/buildTile';
 import { PLAYER_COLORS } from '../tiles/palette';
 import { builtTile, featureSpots, waterfallsAt } from '../game/tiles3d';
 import { landMaterial, waterMaterial, waterUniforms } from './materials';
-import { wandererGeometry } from './Wanderer';
+import { markerGeometry, markerMaterial, markerOutlineMaterial, wandererBaseGeometry, wandererGeometry } from './Wanderer';
 import { reducedMotion } from './Stage';
 
 const DROP_HEIGHT = 5;
@@ -140,6 +140,10 @@ export function BoardTiles({ tiles, bounce, shadows }: {
 
 export interface PieceItem { id: string; player: number; grand: boolean; x: number; z: number }
 
+/** Placed Wanderers stand this much bigger than the claim ghosts' base model, so they read on a busy board. */
+export const PIECE_SCALE = 1.55;
+const MARKER_Y = 1.3;
+
 /** Every Wanderer on the board, with its world position. */
 export function usePieces(s: GameState, version: number): PieceItem[] {
   return useMemo(() => {
@@ -160,15 +164,20 @@ export function usePieces(s: GameState, version: number): PieceItem[] {
 
 interface Shown extends PieceItem { born: number; leaving: number }
 
-export function Wanderers({ pieces, shadows, onPick, pickable }: {
+export function Wanderers({ pieces, shadows, onPick, pickable, markers = true, highlight }: {
   pieces: PieceItem[];
   shadows: boolean;
+  /** Floating gems over every Wanderer. */
+  markers?: boolean;
+  /** Pulse a ring around these Wanderers (the newest one, or one picked in the log). */
+  highlight?: string | null;
   /** Send Home: tap an opponent's Wanderer. */
   pickable?: (p: PieceItem) => boolean;
   onPick?: (p: PieceItem) => void;
 }) {
   const [shown, setShown] = useState<Shown[]>([]);
   const refs = useRef(new Map<string, THREE.Group>());
+  const gems = useRef(new Map<string, THREE.Mesh>());
   const clock = useRef(0);
   const first = useRef(true);
 
@@ -191,10 +200,19 @@ export function Wanderers({ pieces, shadows, onPick, pickable }: {
     clock.current += Math.min(dt, 0.05);
     const now = clock.current;
     let expired = false;
+    let i = 0;
     for (const o of shown) {
+      const gem = gems.current.get(o.id);
+      if (gem) {
+        // Each gem bobs on its own phase so a crowd of them doesn't move in lockstep.
+        gem.position.y = MARKER_Y + (o.grand ? 0.25 : 0) + (reducedMotion ? 0 : Math.sin(now * 2 + i * 1.3) * 0.07);
+        gem.rotation.y = reducedMotion ? 0.4 : now * 0.9 + i;
+        gem.visible = o.leaving < 0;
+      }
+      i++;
       const g = refs.current.get(o.id);
       if (!g) continue;
-      const base = o.grand ? 1.45 : 1;
+      const base = (o.grand ? 1.4 : 1) * PIECE_SCALE;
       if (o.leaving >= 0) {
         // Flies up and spins away home.
         const k = (now - o.leaving) / 0.8;
@@ -224,11 +242,22 @@ export function Wanderers({ pieces, shadows, onPick, pickable }: {
         return (
           <group key={o.id} position={[o.x, 0, o.z]}>
             <group ref={(g) => { if (g) refs.current.set(o.id, g); else refs.current.delete(o.id); }}>
-              <mesh geometry={wandererGeometry(playerColor(o.player))} material={landMaterial} castShadow={shadows} />
+              <mesh geometry={wandererBaseGeometry(playerColor(o.player))} material={landMaterial} position={[0, -0.04, 0]} receiveShadow={shadows} />
+              <mesh geometry={wandererGeometry(playerColor(o.player))} material={landMaterial} position={[0, 0.04, 0]} castShadow={shadows} />
             </group>
+            {markers && (
+              <mesh
+                ref={(m) => { if (m) gems.current.set(o.id, m); else gems.current.delete(o.id); }}
+                geometry={markerGeometry} material={markerMaterial(playerColor(o.player))} position={[0, MARKER_Y, 0]}
+                scale={o.grand ? 1.3 : 1} castShadow={false}
+              >
+                <mesh geometry={markerGeometry} material={markerOutlineMaterial} scale={1.28} />
+              </mesh>
+            )}
+            {highlight === o.id && o.leaving < 0 && <PulseRing color={playerColor(o.player)} radius={0.42} />}
             {canPick && (
               <>
-                <PulseRing color={0xffffff} radius={0.2} />
+                <PulseRing color={0xffffff} radius={0.38} />
                 <Html position={[0, 0.75, 0]} center zIndexRange={[20, 0]}>
                   <button type="button" className="board-chip danger" onClick={() => onPick?.(o)}>Send home</button>
                 </Html>
@@ -288,8 +317,13 @@ export function SpotMarkers({ cells, selected, color, onPick }: {
 }
 
 /** The drawn tile hovering over its chosen spot; tap it to turn it to the next way it fits. */
-export function GhostTile({ def, rot, x, z, s, onTap, color }: {
+export function GhostTile({ def, rot, x, z, s, onTap, color, ways, onConfirm, onCancel }: {
   def: TileDef; rot: number; x: number; z: number; s: GameState; onTap: () => void; color: number;
+  /** How many ways the tile fits on this spot; the turn button hides when there is only one. */
+  ways?: number;
+  /** Confirm and cancel buttons right next to the tile, where the eye already is. */
+  onConfirm?: () => void;
+  onCancel?: () => void;
 }) {
   const ref = useRef<THREE.Group>(null);
   const spin = useRef({ from: rot, at: -1 });
@@ -318,16 +352,28 @@ export function GhostTile({ def, rot, x, z, s, onTap, color }: {
       <mesh geometry={spotGeometry} position={[0, -0.02, 0]}>
         <meshBasicMaterial color={color} transparent opacity={0.45} depthWrite={false} />
       </mesh>
+      {onConfirm && (
+        <Html position={[0, 0, 0]} center zIndexRange={[25, 0]}>
+          <div className="tile-ctl" style={{ '--pc': `#${color.toString(16).padStart(6, '0')}` } as React.CSSProperties}>
+            {onCancel && <button type="button" className="ctl cancel" aria-label="Pick another spot" onClick={onCancel}>✕</button>}
+            {(ways ?? 2) > 1 && <button type="button" className="ctl turn" aria-label="Turn tile" onClick={onTap}>⟳</button>}
+            <button type="button" className="ctl ok" aria-label="Place tile here" onClick={onConfirm}>✓</button>
+          </div>
+        </Html>
+      )}
     </group>
   );
 }
 
 const ghostWandererMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, transparent: true, opacity: 0.5, roughness: 0.9 });
 
-/** Claim step: a chip over each feature of the new tile. The chosen one shows a Wanderer. */
+/**
+ * Claim step: a ghost Wanderer and a small icon chip on each feature of the new tile; tap either to
+ * pick it. The picked one turns solid, hops, and its chip grows into a label.
+ */
 export function ClaimSpots({ s, options, selected, color, player, onPick }: {
   s: GameState;
-  options: { local: number; label: string }[];
+  options: { local: number; label: string; kind: string }[];
   selected: number | null;
   color: number;
   player: number;
@@ -347,26 +393,42 @@ export function ClaimSpots({ s, options, selected, color, player, onPick }: {
         return (
           <group key={o.local} position={[x, 0, z]}>
             {sel ? (
-              <group ref={bob}>
+              <group ref={bob} scale={PIECE_SCALE}>
                 <mesh geometry={wandererGeometry(color)} material={landMaterial} castShadow />
               </group>
             ) : (
-              <mesh geometry={wandererGeometry(color)} material={ghostWandererMat} position={[0, 0.06, 0]} onClick={(e) => { if (isTap(e)) onPick(o.local); }} />
+              <mesh geometry={wandererGeometry(color)} material={ghostWandererMat} position={[0, 0.06, 0]} scale={PIECE_SCALE * 0.9} />
             )}
-            <PulseRing color={color} radius={0.2} />
+            <PulseRing color={color} radius={0.3} />
             {/* A bigger invisible target so a fingertip can hit the ghost Wanderer. */}
-            <mesh position={[0, 0.2, 0]} visible={false} onClick={(e) => { if (isTap(e)) onPick(o.local); }}>
-              <cylinderGeometry args={[0.2, 0.2, 0.45, 8]} />
+            <mesh position={[0, 0.3, 0]} visible={false} onClick={(e) => { if (isTap(e)) onPick(o.local); }}>
+              <cylinderGeometry args={[0.3, 0.3, 0.7, 8]} />
             </mesh>
-            {sel && (
-              <Html position={[0, 0.95, 0]} center zIndexRange={[20, 0]} pointerEvents="none">
-                <span className="board-chip" aria-hidden="true" style={{ '--chip': playerCss(player) } as React.CSSProperties}>{o.label}</span>
-              </Html>
-            )}
+            <Html position={[0, sel ? 1.15 : 0.95, 0]} center zIndexRange={[20, 0]}>
+              <button
+                type="button" className={`claim-chip${sel ? ' on' : ''}`} aria-pressed={sel} aria-label={o.label}
+                style={{ '--chip': playerCss(player) } as React.CSSProperties} onClick={() => onPick(o.local)}
+              >
+                <FeatureIcon kind={o.kind} />{sel && <span>{o.label}</span>}
+              </button>
+            </Html>
           </group>
         );
       })}
     </group>
+  );
+}
+
+/** Little line icons for the four features, used on board chips, the dock and the play log. */
+export function FeatureIcon({ kind }: { kind: string }) {
+  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+  return (
+    <svg className="ficon" viewBox="0 0 24 24" aria-hidden="true">
+      {kind === 'road' && <><path {...p} d="M8 21 11 3M16 21 13 3" /><path {...p} d="M12 7v2M12 13v2" /></>}
+      {kind === 'town' && <><path {...p} d="M3 21V11l4-4 4 4v10M11 21V8l5-5 5 5v13M3 21h18" /><path {...p} d="M15 12h2M15 16h2" /></>}
+      {kind === 'monastery' && <><path {...p} d="M4 21V12h10v9M14 21V9l3-3 3 3v12M3 21h18M9 12V9M7.5 10.5h3" /><circle cx="17" cy="4" r="1.6" fill="currentColor" /></>}
+      {kind === 'meadow' && <><path {...p} d="M3 20h18" /><path {...p} d="M6 20c0-5-1-8-3-10M10 20c0-6 0-9-1-12M14 20c0-6 0-9 1-12M18 20c0-5 1-8 3-10" /></>}
+    </svg>
   );
 }
 

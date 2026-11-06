@@ -5,24 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="theme-color" content="#dde9f3" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M4 26 16 4l12 22z%22 fill=%22%235e9e45%22/%3E%3Cpath d=%22M12 26v-8h8v8z%22 fill=%22%23c0472f%22/%3E%3C/svg%3E" />
     <title>Glockenfels</title>
     <style>
       :root {
-        --ink: #1d2a24;
-        --muted: #56645c;
-        --glass: rgba(255, 255, 255, 0.82);
-        --line: rgba(29, 42, 36, 0.12);
+        /* Glockenfels design tokens. Panels are "slabs" like the 3D tiles: paper on top, a soil-brown edge below. */
+        --ink: #23302a;
+        --muted: #5d6b62;
+        --paper: #fffaf0;
+        --cream: #f4ecd8;
+        --soil: #b49a72;
+        --soil-dark: #8a7352;
+        --glass: rgba(255, 250, 240, 0.86);
+        --line: rgba(60, 48, 30, 0.14);
+        --deep: #1f4f86;
         --blue: #2f74c0;
+        --blue-edge: #1d4f8a;
+        --roof: #c0472f;
+        --meadow: #5e9e45;
+        --gold: #e0b84a;
         --good: #2e9b6b;
         --ok: #c28a12;
         --low: #c4472f;
-        --font: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+        --font: "Nunito Variable", "Nunito", system-ui, -apple-system, sans-serif;
+        --font-display: "Fraunces Variable", "Fraunces", Georgia, serif;
         --mono: ui-monospace, "SF Mono", Menlo, monospace;
+        --slab: 0 3px 0 var(--soil), 0 6px 16px rgba(60, 48, 30, 0.14);
+        --slab-sm: 0 2px 0 var(--soil), 0 3px 8px rgba(60, 48, 30, 0.1);
       }
       * { box-sizing: border-box; }
       [hidden] { display: none !important; }
       html, body, #root { height: 100%; margin: 0; }
-      body { background: #dde9f3; color: var(--ink); font: 15px/1.4 var(--font); overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+      body { background: #dde9f3; color: var(--ink); font: 500 15px/1.4 var(--font); overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-font-smoothing: antialiased; }
+      h1, h2, .display { font-family: var(--font-display); font-variation-settings: "SOFT" 100; letter-spacing: -0.01em; }
+      b, strong { font-weight: 800; }
+      .rauten { height: 8px; background: conic-gradient(from 45deg, #fff 25%, #4a8fd6 0 50%, #fff 0 75%, #4a8fd6 0) 0 0 / 10px 10px; }
       .app { position: relative; height: 100%; }
       .scene { position: absolute !important; inset: 0; touch-action: none; }
 
@@ -55,21 +72,23 @@
       .dock > * { pointer-events: auto; }
       .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
       button {
-        font: 600 14px var(--font); color: var(--ink); background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
-        min-height: 44px; padding: 0 14px; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-        -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+        font: 700 15px var(--font); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 14px;
+        min-height: 46px; padding: 0 16px; cursor: pointer; box-shadow: var(--slab-sm); position: relative;
+        -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: transform 0.08s, box-shadow 0.08s, background 0.15s;
       }
-      button:active { transform: scale(0.97); }
-      button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-      button.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
-      .seg { display: inline-flex; background: var(--glass); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 2px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-      .seg button { border: 0; background: transparent; min-height: 38px; border-radius: 9px; padding: 0 12px; backdrop-filter: none; -webkit-backdrop-filter: none; }
-      .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+      button:active { transform: translateY(2px); box-shadow: 0 0 0 var(--soil), 0 1px 3px rgba(60, 48, 30, 0.12); }
+      button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+      button.primary { background: var(--blue); color: #fff; border-color: var(--blue-edge); box-shadow: 0 3px 0 var(--blue-edge), 0 6px 14px rgba(31, 79, 134, 0.28); }
+      button.primary:active { box-shadow: 0 0 0 var(--blue-edge), 0 1px 3px rgba(31, 79, 134, 0.2); }
+      .seg { display: inline-flex; background: var(--glass); border: 1px solid var(--line); border-radius: 14px; padding: 3px; gap: 2px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+      .seg button { border: 0; background: transparent; min-height: 38px; border-radius: 11px; padding: 0 12px; box-shadow: none; }
+      .seg button:active { transform: none; }
+      .seg button[aria-pressed="true"] { background: var(--deep); color: #fff; box-shadow: 0 2px 0 #143559; }
 
       .panel {
         position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(130px + env(safe-area-inset-bottom, 0px));
-        width: min(320px, calc(100% - 28px)); background: rgba(255, 255, 255, 0.94); border-radius: 16px; padding: 14px; display: grid; gap: 10px;
-        box-shadow: 0 10px 30px rgba(20, 40, 60, 0.18);
+        width: min(320px, calc(100% - 28px)); background: var(--paper); border-radius: 18px; padding: 14px; display: grid; gap: 10px;
+        border: 1px solid var(--line); box-shadow: 0 4px 0 var(--soil), 0 14px 34px rgba(40, 32, 20, 0.22);
       }
       .panel-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
       .panel .seg { background: #eef2f0; backdrop-filter: none; }
@@ -77,13 +96,13 @@
       .toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
       .toggle i { width: 46px; height: 28px; border-radius: 14px; background: #c9d1cc; position: relative; transition: background 0.15s; flex: none; }
       .toggle i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-      .toggle input:checked + i { background: var(--good); }
+      .toggle input:checked + i { background: var(--meadow); }
       .toggle input:checked + i::after { transform: translateX(18px); }
       .toggle input:focus-visible + i { outline: 2px solid var(--blue); outline-offset: 2px; }
       .note { margin: 0; font-size: 12px; color: var(--muted); }
 
       .score-pop {
-        font: 800 30px/1 var(--font); color: #fff; text-align: center; text-shadow: 0 2px 0 #1f5591, 0 4px 14px rgba(0,0,0,0.25);
+        font: 900 32px/1 var(--font-display); font-variation-settings: "SOFT" 100; color: #fff; text-align: center; text-shadow: 0 2px 0 #1f5591, 0 4px 14px rgba(0,0,0,0.25);
         animation: pop 1.8s ease-out forwards; white-space: nowrap;
       }
       .score-pop small { display: block; font-size: 13px; font-weight: 700; margin-top: 4px; }

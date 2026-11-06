@@ -9,7 +9,7 @@ describe('config', () => {
   it('reports conflicting picks', () => {
     expect(findConflicts(['bigTowns', 'townTax'])).toHaveLength(1);
     expect(findConflicts(['actions', 'peacefulValley'])).toHaveLength(1);
-    expect(findConflicts(['bigTowns', 'farmers'])).toHaveLength(0);
+    expect(findConflicts(['bigTowns', 'harvest'])).toHaveLength(0);
     expect(() => buildConfig({ players: 2, rules: ['quickGame', 'marathon'] })).toThrow();
   });
 
@@ -165,7 +165,7 @@ describe('game flow', () => {
 
 describe('rule draft', () => {
   it('sends conflicts to the host and otherwise proves the mix playable', () => {
-    const r = resolveDraft({ players: 3 }, ['bigTowns', 'townTax', 'farmers']);
+    const r = resolveDraft({ players: 3 }, ['bigTowns', 'townTax', 'harvest']);
     expect(r.conflicts).toHaveLength(1);
     expect(r.config).toBeNull();
     const ok = resolveDraft({ players: 3, modules: ['actions'] }, ['bigTowns', 'chaos', 'turnabout'], 2);

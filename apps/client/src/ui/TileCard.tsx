@@ -93,3 +93,37 @@ export function ActionCard({ kind, selected, onClick, hidden }: { kind: ActionKi
     </button>
   );
 }
+
+const CENTER_TEXT: Partial<Record<TileDef['center'], string>> = {
+  monastery: 'Monastery', castle: 'Castle on a crag', shrine: 'Wayside shrine', maypole: 'Maypole square', lake: 'Mountain lake',
+};
+const GOOD_TEXT = { pretzels: 'Pretzels', hops: 'Hops', timber: 'Timber' } as const;
+
+/** One line on what a tile holds, for the builder: "Town on 2 sides · Road bends · Banner". */
+export function describeTile(def: TileDef): string {
+  if (def.action) return ACTION_INFO[def.action].text;
+  const n = (k: string) => def.edges.filter((e) => e === k).length;
+  const parts: string[] = [];
+  const towns = n('town'), roads = n('road'), rivers = n('river');
+  if (towns === 4) parts.push('Town on all sides');
+  else if (towns) parts.push(`Town on ${towns} side${towns > 1 ? 's' : ''}`);
+  const centre = CENTER_TEXT[def.center];
+  if (centre) parts.push(centre);
+  if (rivers) parts.push(rivers === 1 ? 'River source' : 'River');
+  if (roads) {
+    const junction = def.center !== 'none' && def.center !== 'monastery';
+    if (roads === 1) parts.push(def.center === 'monastery' ? 'Lane to the gate' : 'Road ends');
+    else if (roads === 2 && !junction) {
+      const [a, b] = def.edges.map((e, i) => (e === 'road' ? i : -1)).filter((i) => i >= 0);
+      parts.push(b - a === 2 ? 'Straight road' : 'Road bends');
+    } else parts.push(`${roads}-way crossroads`);
+  }
+  if (!parts.length) parts.push('Open fields');
+  // Don't repeat the tile's own name ("Monastery · Monastery").
+  if (parts.length > 1 && parts[0] === def.name) parts.shift();
+  if (def.banner) parts.push('Banner');
+  if (def.beerGarden) parts.push('Beer garden');
+  if (def.hopGarden) parts.push('Hop garden');
+  if (def.goods) parts.push(GOOD_TEXT[def.goods]);
+  return parts.join(' · ');
+}

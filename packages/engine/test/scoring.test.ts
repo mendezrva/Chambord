@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apply, featureOf, legalPlacements } from '../src/game';
+import { apply, claimable, featureOf, legalPlacements } from '../src/game';
 import { force, newGame } from './helpers';
 
 describe('scoring', () => {
@@ -43,7 +43,7 @@ describe('scoring', () => {
     const s = newGame({ players: 3 });
     // Player 1 starts a town west of the castle? The castle's west edge is a road, so build north.
     force(s, 'town-edge', 0, -1, 0, { local: 0 });
-    force(s, 'town-street', 0, -2, 1, { local: 0 }); // rot 1: town N and S. Player 2 cannot claim the same town, so this passes.
+    force(s, 'town-street', 0, -2, 1); // rot 1: town N and S. Player 2 cannot claim the same town, only a field.
     expect(s.players[1].pieces.wanderer).toBe(7);
     // Player 3 closes it with a town edge facing south.
     force(s, 'town-edge', 0, -3, 2);
@@ -57,7 +57,11 @@ describe('scoring', () => {
     s.hand = ['town-street'];
     s.step = 'place';
     apply(s, { type: 'place', hand: 0, x: 0, z: -2, rot: 1 });
-    expect(s.step).toBe('place'); // no claimable feature, so the turn moved on
+    // Only the field is open now; the town already has a Wanderer.
+    const t = s.board['0,-2'];
+    const kinds = claimable(s).map((i) => featureOf(s, t.featureIds[i]).kind);
+    expect(kinds).not.toContain('town');
+    expect(() => apply(s, { type: 'claim', local: 0, piece: 'wanderer' })).toThrow();
   });
 
   it('scores incomplete features at the end', () => {
@@ -70,8 +74,8 @@ describe('scoring', () => {
     expect(s.players[0].score).toBe(1);
   });
 
-  it('meadows score 3 per completed town they touch when Farmers is on', () => {
-    const s = newGame({ rules: ['farmers'] });
+  it('fields score 3 per completed town they touch in the base game', () => {
+    const s = newGame();
     force(s, 'town-edge', 0, -1, 0); // open town
     // Claim the meadow of a plain tile that joins the town tile's meadow.
     force(s, 'meadow', 1, -1, 0, { local: 0 });
@@ -81,6 +85,25 @@ describe('scoring', () => {
     force(s, 'meadow', 0, 1, 0);
     expect(s.step).toBe('ended');
     expect(s.players[1].score).toBe(3);
+  });
+
+  it('Bumper Harvest makes fields worth 4 per town', () => {
+    const s = newGame({ rules: ['harvest'] });
+    force(s, 'town-edge', 0, -1, 0); // open town
+    // Claim the meadow of a plain tile that joins the town tile's meadow.
+    force(s, 'meadow', 1, -1, 0, { local: 0 });
+    force(s, 'town-edge', 0, -2, 2); // close the town
+    expect(featureOf(s, s.board['0,-1'].featureIds[0]).open).toBe(0);
+    s.deck = [];
+    force(s, 'meadow', 0, 1, 0);
+    expect(s.step).toBe('ended');
+    expect(s.players[1].score).toBe(4);
+  });
+
+  it('Town Folk takes fields out of play', () => {
+    const s = newGame({ rules: ['noFields'] });
+    force(s, 'meadow', 0, 1, 0);
+    expect(s.step).toBe('place'); // a plain field tile offers nothing to claim
   });
 
   it('Long Roads doubles roads of five tiles', () => {

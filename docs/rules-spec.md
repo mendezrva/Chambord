@@ -13,7 +13,7 @@ This is the paper version of the rules. In Phase 2 every number and table here b
 
 1. **Draw** a tile.
 2. **Place** it next to at least one tile, so every touching edge matches (road to road, town to town, meadow to meadow, river to river). If it fits nowhere, discard it and draw again.
-3. **Claim (optional):** put one Wanderer on a feature of the tile you just placed: a road, a town, the monastery or (with the meadow rule) a meadow. You can't claim a feature that already has a Wanderer anywhere along it.
+3. **Claim (optional):** put one Wanderer on a feature of the tile you just placed: a road, a town, the monastery or a field (meadow). You can't claim a feature that already has a Wanderer anywhere along it.
 4. **Score** every feature that the tile completed. Wanderers on scored features go back to their owners.
 
 ## Features and scoring
@@ -23,11 +23,11 @@ This is the paper version of the rules. In Phase 2 every number and table here b
 | Road | Both ends reach a junction, town, monastery, castle or loop | 1 per tile | 1 per tile |
 | Town | Fully enclosed by walls | 2 per tile, +2 per banner | 1 per tile, +1 per banner |
 | Monastery | It and all 8 surrounding spaces are filled | 9 | 1 per filled space in the 3 × 3 |
-| Meadow (optional rule) | Never; scored only at game end | – | 3 per completed town it touches |
+| Field (meadow) | Never; scored only at game end, Wanderers stay out all game | – | 3 per completed town it touches (0 turns fields off) |
 
 **Majority:** the player with the most Wanderers on a feature scores it. Tied players all score the full amount. Other players score nothing.
 
-**Game end:** when the last tile is placed, score every incomplete feature, then meadows if that rule is on. Highest score wins; ties share the win.
+**Game end:** when the last tile is placed, score every incomplete feature, then fields. Highest score wins; ties share the win.
 
 ## Base set: 64 tiles
 
