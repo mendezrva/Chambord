@@ -12,6 +12,18 @@ Phase 1 (design and 3D style test) is done: `apps/client` holds the 3D prototype
 
 Phase 2 (rules engine) is built: `packages/engine` is a standalone TypeScript engine with no graphics. Every tile, module, scoring value and draft rule is data; a seed plus the action log replays any game; a bot plays complete games; and the test suite plays thousands of bot games across every module and rule mix to prove no game can get stuck.
 
+Phase 3 (playable 3D game) is built: the client now runs a full pass-and-play game on the engine. A title screen with a custom game builder (players and bots, presets, modules, picked or secretly drafted rules, tile counts, scoring, pieces and end conditions) starts a game on the 3D board. Legal spots glow, the drawn tile hovers over the spot you tap and turns as you tap it, Wanderers hop onto the feature you pick, completed features bounce with score popups (and confetti for towns), and a pass-the-device screen hides action tiles between turns. Games save to the device after every move and resume after a reload. The Phase 1 style test is still there under "Graphics test" (or `?styletest`).
+
+## How to play (pass and play)
+
+1. Pick a quick-start preset or build your own game, then **Start game**.
+2. **Your turn:** tap a glowing spot. The tile hovers there; tap it (or **Turn**) to rotate it through the ways it fits, then **Place**.
+3. **Wanderer:** pick a feature of the new tile (Town, Road, Monastery, Meadow when Farmers is on) and tap **Wanderer**, or **No thanks**. **Undo** lifts the tile back up.
+4. **Action tiles** (if on): at the start of your turn, play one or tap **Not now**.
+5. Hand the device to the next player when the pass screen asks.
+
+Touch: one finger pans, pinch zooms, two fingers rotate and tilt. Mouse: drag to rotate, right-drag to pan, scroll to zoom; R turns the tile, Enter places it.
+
 ## Run it
 
 Requires Node 20 or later.
@@ -34,13 +46,15 @@ On your phone, open the "Network" address that `npm run dev` prints.
 | --- | --- |
 | `apps/client` | The browser game (React, Three.js via React Three Fiber) |
 | `apps/client/src/tiles` | The low-poly tile generator, palette and tile catalog |
-| `apps/client/src/board` | Demo board layout (a stand-in for the Phase 2 rules engine) |
-| `apps/client/src/scene` | 3D scene: board, scenery, lights, confetti |
+| `apps/client/src/board` | Random demo board for the graphics test |
+| `apps/client/src/scene` | 3D scene: the live game board (tiles, Wanderers, spot markers, preview tile), camera, scenery, lights, confetti |
+| `apps/client/src/game` | Glue between engine and 3D: tile specs, Wanderer spots, the saved session and undo |
+| `apps/client/src/ui` | Game screen, builder, secret rule draft, tile cards |
 | `packages/engine` | The rules engine: tiles, modules, scoring, turn flow, action tiles, rule draft, bot, CLI runner |
 | `packages/engine/src/content` | Tile sets and decks as data (base set, Riverlands, Hop Gardens, Beer Gardens, Market Day, action tiles) |
 | `docs` | Style guide and rules spec |
 
-Planned for later phases: wiring the engine into the 3D client (Phase 3) and `apps/server` for online multiplayer (Phase 4).
+Planned next: `apps/server` for online multiplayer, accounts and Elo (Phase 4).
 
 ## How the engine works
 
