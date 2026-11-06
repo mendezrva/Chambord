@@ -65,3 +65,68 @@ export function markerMaterial(color: number) {
 
 /** A white back-face shell around the gem, so a red marker still stands out against red roofs. */
 export const markerOutlineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide });
+
+// ---------- sonar rings ----------
+
+/** Outer reach of the sonar rings, in world units (a tile is 2 across). */
+export const SONAR_RADIUS = 1.35;
+
+/** A flat disc that a shader fills with rings, so every placed Wanderer costs one quad and no textures. */
+export const sonarGeometry = new THREE.PlaneGeometry(SONAR_RADIUS * 2, SONAR_RADIUS * 2).rotateX(-Math.PI / 2);
+
+/** Shared clock for every sonar material; the board ticks it once a frame. */
+export const sonarUniforms = { uTime: { value: 0 } };
+
+const sonarMats = new Map<number, THREE.ShaderMaterial>();
+/**
+ * Rings in the player's colour that leave the plinth and fade as they spread, like a sonar ping.
+ * Each Wanderer starts its pings at a phase taken from its world position, so a crowd doesn't pulse in step.
+ */
+export function sonarMaterial(color: number) {
+  let m = sonarMats.get(color);
+  if (!m) {
+    m = new THREE.ShaderMaterial({
+      uniforms: { uTime: sonarUniforms.uTime, uColor: { value: new THREE.Color(color) } },
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        varying float vSeed;
+        void main() {
+          vUv = uv * 2.0 - 1.0;
+          vec3 o = modelMatrix[3].xyz;
+          vSeed = fract(sin(dot(o.xz, vec2(12.9898, 78.233))) * 43758.5453);
+          gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform float uTime;
+        uniform vec3 uColor;
+        varying vec2 vUv;
+        varying float vSeed;
+        void main() {
+          float r = length(vUv);
+          if (r > 1.0) discard;
+          float a = 0.0;
+          // Two pings a cycle, each a crisp band with a soft trail behind it.
+          for (int i = 0; i < 2; i++) {
+            float k = fract(uTime * 0.5 + vSeed + float(i) * 0.5);
+            float front = mix(0.16, 1.0, k);
+            float d = front - r;
+            float band = smoothstep(0.0, 0.02, d) * (1.0 - smoothstep(0.06, 0.13, d));
+            float trail = step(0.0, d) * (1.0 - smoothstep(0.0, 0.35, d)) * 0.4;
+            a += (band + trail) * (1.0 - k * k);
+          }
+          // A steady glow pooled under the plinth.
+          a += (1.0 - smoothstep(0.1, 0.26, r)) * 0.5;
+          a = clamp(a, 0.0, 1.0);
+          vec3 c = mix(uColor, vec3(1.0), 0.12);
+          gl_FragColor = vec4(c, a);
+        }`,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    sonarMats.set(color, m);
+  }
+  return m;
+}

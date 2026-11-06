@@ -11,7 +11,7 @@ import { TILE } from '../tiles/buildTile';
 import { PLAYER_COLORS } from '../tiles/palette';
 import { builtTile, featureSpots, waterfallsAt } from '../game/tiles3d';
 import { landMaterial, waterMaterial, waterUniforms } from './materials';
-import { markerGeometry, markerMaterial, markerOutlineMaterial, wandererBaseGeometry, wandererGeometry } from './Wanderer';
+import { markerGeometry, markerMaterial, markerOutlineMaterial, sonarGeometry, sonarMaterial, sonarUniforms, wandererBaseGeometry, wandererGeometry } from './Wanderer';
 import { reducedMotion } from './Stage';
 
 const DROP_HEIGHT = 5;
@@ -164,11 +164,13 @@ export function usePieces(s: GameState, version: number): PieceItem[] {
 
 interface Shown extends PieceItem { born: number; leaving: number }
 
-export function Wanderers({ pieces, shadows, onPick, pickable, markers = true, highlight }: {
+export function Wanderers({ pieces, shadows, onPick, pickable, markers = true, sonar = true, highlight }: {
   pieces: PieceItem[];
   shadows: boolean;
   /** Floating gems over every Wanderer. */
   markers?: boolean;
+  /** Rings in the player's colour that radiate out from every placed Wanderer. */
+  sonar?: boolean;
   /** Pulse a ring around these Wanderers (the newest one, or one picked in the log). */
   highlight?: string | null;
   /** Send Home: tap an opponent's Wanderer. */
@@ -178,6 +180,7 @@ export function Wanderers({ pieces, shadows, onPick, pickable, markers = true, h
   const [shown, setShown] = useState<Shown[]>([]);
   const refs = useRef(new Map<string, THREE.Group>());
   const gems = useRef(new Map<string, THREE.Mesh>());
+  const pings = useRef(new Map<string, THREE.Mesh>());
   const clock = useRef(0);
   const first = useRef(true);
 
@@ -199,6 +202,8 @@ export function Wanderers({ pieces, shadows, onPick, pickable, markers = true, h
   useFrame((_, dt) => {
     clock.current += Math.min(dt, 0.05);
     const now = clock.current;
+    // Reduced motion freezes the rings mid-ping instead of hiding them.
+    sonarUniforms.uTime.value = reducedMotion ? 0.35 : now;
     let expired = false;
     let i = 0;
     for (const o of shown) {
@@ -210,6 +215,14 @@ export function Wanderers({ pieces, shadows, onPick, pickable, markers = true, h
         gem.visible = o.leaving < 0;
       }
       i++;
+      const ping = pings.current.get(o.id);
+      if (ping) {
+        // Rings grow in once the Wanderer has landed, and vanish as it leaves.
+        const t = now - o.born;
+        ping.visible = o.leaving < 0 && t >= 0.3;
+        const k = Math.min(1, Math.max(0, (t - 0.3) / 0.4));
+        ping.scale.setScalar((o.grand ? 1.2 : 1) * (0.4 + 0.6 * k));
+      }
       const g = refs.current.get(o.id);
       if (!g) continue;
       const base = (o.grand ? 1.4 : 1) * PIECE_SCALE;
@@ -241,6 +254,12 @@ export function Wanderers({ pieces, shadows, onPick, pickable, markers = true, h
         const canPick = !!pickable?.(o) && o.leaving < 0;
         return (
           <group key={o.id} position={[o.x, 0, o.z]}>
+            {sonar && (
+              <mesh
+                ref={(m) => { if (m) pings.current.set(o.id, m); else pings.current.delete(o.id); }}
+                geometry={sonarGeometry} material={sonarMaterial(playerColor(o.player))} position={[0, 0.03, 0]} renderOrder={2}
+              />
+            )}
             <group ref={(g) => { if (g) refs.current.set(o.id, g); else refs.current.delete(o.id); }}>
               <mesh geometry={wandererBaseGeometry(playerColor(o.player))} material={landMaterial} position={[0, -0.04, 0]} receiveShadow={shadows} />
               <mesh geometry={wandererGeometry(playerColor(o.player))} material={landMaterial} position={[0, 0.04, 0]} castShadow={shadows} />

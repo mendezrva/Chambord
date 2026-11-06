@@ -4,7 +4,7 @@
  * play here, and each player is sent a copy of the state with hidden information removed.
  */
 import {
-  apply, botAction, configFromSpec, DRAFT_RULES, findConflicts, MODULES, optionsFromSpec, replay, resolveDraft,
+  apply, botAction, configFromSpec, DRAFT_RULES, findConflicts, MODULES, optionsFromSpec, replay, resolveDraft, upgradeConfig,
   type Action, type ActionKind, type GameConfig, type GameState, type GameSpec,
 } from '@glockenfels/engine';
 import { TAKEOVER_AFTER_S, type GameView, type ResultRow, type RoomSettings, type RoomView, type ServerMessage, type UserView } from '@glockenfels/protocol';
@@ -396,6 +396,7 @@ export class Room {
     const r = new Room(hub, m.code, m.hostId, settings);
     r.seats = m.seats.map((s) => ({ ...s, kind: s.bot ? 'bot' : 'human' }));
     const humans = new Set(r.humans());
+    upgradeConfig(m.config);
     const state = replay(m.config, m.seed, m.log, r.seats.map((s) => s.name));
     r.game = { matchId: m.id, config: m.config, seed: m.seed, state, events: [], actor: null, drafted: m.drafted, rated: humans.size >= 2 };
     r.phase = 'playing';

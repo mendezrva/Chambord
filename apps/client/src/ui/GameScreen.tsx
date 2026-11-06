@@ -447,7 +447,7 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
         <Suspense fallback={null}>
           <Lights extent={bounds.extent + 2} shadows={quality.shadows} />
           <Mountains />
-          <Clouds extent={bounds.extent} />
+          {view !== 'overhead' && <Clouds extent={bounds.extent} />}
           <BoardTiles tiles={tiles} bounce={bounce} shadows={quality.shadows} />
           <Wanderers pieces={pieces} shadows={quality.shadows} markers={prefs.markers} highlight={highlight} pickable={sendHomePick ? (p) => p.player !== s.current : undefined} onPick={onPickPiece} />
           {isHuman && !hidden && s.step === 'place' && handDef && (
@@ -483,8 +483,12 @@ export function GameScreen({ game, onQuit, onRematch, online, quitLabel = 'Save 
           ))}
         </div>
         <div className="top-right">
-          <span className="chip" title="Tiles left in the deck">▦ {deckLeft}</span>
-          {s.players.length > 2 && <span className="chip" title="Turn order">{s.direction === 1 ? '↻' : '↺'}</span>}
+          <button
+            type="button" className={`chip deck-chip${prefs.side && prefs.tab === 'tiles' ? ' on' : ''}`}
+            aria-label={`${deckLeft} tiles left. Show the remaining tiles`} title="Remaining tiles"
+            onClick={() => setPrefs(prefs.side && prefs.tab === 'tiles' ? { side: false } : { side: true, tab: 'tiles' })}
+          >▦ {deckLeft}</button>
+          {s.players.length > 2 && <span className="chip turn-chip" title="Turn order">{s.direction === 1 ? '↻' : '↺'}</span>}
           <button type="button" className={`icon${prefs.side ? ' on' : ''}`} aria-expanded={prefs.side} aria-label="Play log, scores and tiles" title="Play log, scores and tiles" onClick={() => setPrefs({ side: !prefs.side })}>
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 4h11l3 3v13H5z M8 9h8 M8 13h8 M8 17h5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>

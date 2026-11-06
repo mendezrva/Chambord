@@ -4,7 +4,7 @@
  * A seed plus the action log is the whole game, so saving and undo are both just replays.
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { apply, replay, type Action, type GameConfig, type GameEvent, type GameState } from '@glockenfels/engine';
+import { apply, replay, upgradeConfig, type Action, type GameConfig, type GameEvent, type GameState } from '@glockenfels/engine';
 
 export interface Seat { name: string; bot: boolean }
 
@@ -29,6 +29,8 @@ export function loadSave(): SavedGame | null {
     if (!raw) return null;
     const s = JSON.parse(raw) as SavedGame;
     if (s.v !== 1 || !s.config || !Array.isArray(s.log)) return null;
+    // Older saves predate fields being on in every game.
+    upgradeConfig(s.config);
     // Make sure it still replays with this version of the engine.
     const g = replay(s.config, s.seed, s.log, s.seats.map((x) => x.name));
     if (g.step === 'ended') return null;
