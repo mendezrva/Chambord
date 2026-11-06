@@ -3,7 +3,6 @@
  * laid out so the flyover tells a story: a town gate, a road out to the fields, a stream that
  * bends past a monastery, and Burg Glockenfels on its crag.
  */
-import * as THREE from 'three';
 import type { Center, Edge } from '../tiles/catalog';
 import { buildTile, TILE, type BuiltTile } from '../tiles/buildTile';
 import { makeRng, seedFor } from '../tiles/rng';
@@ -76,4 +75,3 @@ export function disposeIntroBoard(tiles: IntroTile[]) {
 }
 
 export const BOARD_EXTENT = (GRID * TILE) / 2;
-export const _v = new THREE.Vector3();
