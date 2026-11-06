@@ -22,6 +22,10 @@ export interface TileSpec {
   seed: number;
   /** Edge indexes where a river runs off the board and should fall as a waterfall. */
   waterfalls?: number[];
+  /** Module dressing: hop poles in the meadow, a beer garden in the town, a market stall with goods. */
+  hopGarden?: boolean;
+  beerGarden?: boolean;
+  goods?: 'pretzels' | 'hops' | 'timber';
 }
 
 // Edge geometry: 0 north (-z), 1 east (+x), 2 south (+z), 3 west (-x).
@@ -253,7 +257,7 @@ export function buildTile(spec: TileSpec): BuiltTile {
   const roadPaths = buildPaths(roads, hasCenterFeature ? 0.32 : roads.length === 1 ? 0.15 : 0.12);
   const riverPaths = buildPaths(rivers, spec.center === 'lake' ? 0.3 : 0);
 
-  const bareMeadow = spec.center === 'none' && !towns.length && !roads.length && !rivers.length;
+  const bareMeadow = spec.center === 'none' && !towns.length && !roads.length && !rivers.length && !spec.hopGarden;
   const farm = bareMeadow && rng() < 0.6;
   // Grass patches and, on some open meadows, a ploughed field.
   const patches = T.meadowPatches(rng);
@@ -418,6 +422,18 @@ export function buildTile(spec: TileSpec): BuiltTile {
       const g = freeSpot(0.3);
       if (g) { B.beerGarden(parts, g[0], g[1], rng() < 0.5 ? 0 : Math.PI / 2); placed.push(g); }
     }
+    // Module dressing gets its spot before the houses fill the town.
+    if (spec.beerGarden) {
+      const g = freeSpot(0.26, 200) ?? centroid;
+      B.beerGarden(parts, g[0], g[1], 0);
+      B.beerGarden(parts, g[0] + 0.02, g[1] + 0.13, 0);
+      placed.push(g);
+    }
+    if (spec.goods) {
+      const g = freeSpot(0.26, 200) ?? centroid;
+      B.marketStall(parts, g[0], g[1], Math.atan2(centroid[0] - g[0], centroid[1] - g[1]), spec.goods);
+      placed.push(g);
+    }
     // Houses: tall gables turned to face the town square.
     const want = townBand ? 4 : towns.length * 3 + (towns.length === 4 ? 2 : 0);
     for (let tries = 0; tries < 220 && placed.length - gates.length < want + 2; tries++) {
@@ -472,6 +488,15 @@ export function buildTile(spec: TileSpec): BuiltTile {
   if (spec.center === 'shrine') addShrine(parts);
   if (spec.center === 'maypole') addMaypole(parts);
 
+  // --- hop garden: rows of tall poles with climbing bines, beside the road if there is one ---
+  let hopBox: [number, number, number, number] | null = null;
+  if (spec.hopGarden) {
+    const vertical = roads.includes(0) || roads.includes(2);
+    hopBox = !roads.length ? [-0.5, 0.5, -0.45, 0.45] : vertical ? [0.34, 0.86, -0.7, 0.7] : [-0.7, 0.7, 0.34, 0.86];
+    B.hopYard(parts, rng, ...hopBox);
+  }
+  const inHops = (p: V2) => hopBox !== null && p[0] > hopBox[0] - 0.08 && p[0] < hopBox[1] + 0.08 && p[1] > hopBox[2] - 0.08 && p[1] < hopBox[3] + 0.08;
+
   // --- meadow scenery ---
   const treeCount = farm ? 5 : bareMeadow ? 13 : towns.length > 2 ? 2 : 6;
   const blocked = (p: V2) =>
@@ -480,6 +505,7 @@ export function buildTile(spec: TileSpec): BuiltTile {
     (spec.center === 'castle' && p[1] > 0.35) ||
     [...roadPaths, ...riverPaths].some((path) => distToPath(p, path) < 0.36) ||
     inTown(p) ||
+    inHops(p) ||
     townTris.some(([a, b, c]) => [a, b, c].some((v) => Math.hypot(p[0] - v[0], p[1] - v[1]) < 0.05)) ||
     (hasCenterFeature && Math.hypot(p[0], p[1]) < (spec.center === 'abbey' ? 0.72 : 0.62));
   const trees: V2[] = [];

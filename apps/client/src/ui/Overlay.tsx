@@ -1,14 +1,6 @@
 import { useState } from 'react';
 
-export type View = 'overhead' | 'isometric' | 'closeup';
-export interface Quality {
-  tiles: 40 | 200;
-  shadows: boolean;
-  ao: boolean;
-  tiltShift: boolean;
-  dpr: number;
-  auto: boolean;
-}
+import type { Quality, View } from '../scene/Stage';
 
 const VIEWS: { id: View; label: string }[] = [
   { id: 'overhead', label: 'Overhead' },
@@ -16,7 +8,7 @@ const VIEWS: { id: View; label: string }[] = [
   { id: 'closeup', label: 'Close-up' },
 ];
 
-function Toggle({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void }) {
+export function Toggle({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="toggle" htmlFor={id}>
       <span>{label}</span>
@@ -37,6 +29,7 @@ export function Overlay(props: {
   onCelebrate: () => void;
   tileCount: number;
   autoNote: string | null;
+  onBack: () => void;
 }) {
   const { quality: q, onQuality } = props;
   const [open, setOpen] = useState(false);
@@ -96,6 +89,7 @@ export function Overlay(props: {
           <button type="button" onClick={props.onCelebrate}>Celebrate</button>
           <button type="button" onClick={props.onRebuild}>Rebuild</button>
           <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>Graphics</button>
+          <button type="button" onClick={props.onBack}>Back</button>
         </div>
       </nav>
     </>

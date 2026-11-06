@@ -269,3 +269,43 @@ export function vineyard(p: Parts, x0: number, x1: number, z0: number, z1: numbe
     p.add(new THREE.BoxGeometry(x1 - x0, 0.05, 0.03, 6, 1, 1), PALETTE.vine, { x: (x0 + x1) / 2, y: 0.03, z, vary: 0.18 });
   }
 }
+
+/** Hop garden: a grid of tall poles strung with wires, green bines climbing each pole. */
+export function hopYard(p: Parts, rng: () => number, x0: number, x1: number, z0: number, z1: number) {
+  const cols = Math.max(2, Math.round((x1 - x0) / 0.17));
+  const rows = Math.max(2, Math.round((z1 - z0) / 0.17));
+  const h = 0.42;
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      const x = x0 + (i + 0.5) * ((x1 - x0) / cols), z = z0 + (j + 0.5) * ((z1 - z0) / rows);
+      p.add(new THREE.CylinderGeometry(0.008, 0.011, h, 4), PALETTE.timber, { x, y: h / 2, z });
+      const bh = h * (0.7 + rng() * 0.25);
+      p.add(new THREE.CylinderGeometry(0.018, 0.04, bh, 5), PALETTE.hops, { x, y: bh / 2 + 0.01, z, ry: rng() * 3, vary: 0.14 });
+      p.add(new THREE.IcosahedronGeometry(0.03, 0), PALETTE.vine, { x, y: bh + 0.02, z, vary: 0.1 });
+    }
+  }
+  // Wires along the rows at the top of the poles.
+  for (let j = 0; j < rows; j++) {
+    const z = z0 + (j + 0.5) * ((z1 - z0) / rows);
+    p.add(new THREE.BoxGeometry(x1 - x0, 0.004, 0.004), PALETTE.timber, { x: (x0 + x1) / 2, y: h - 0.01, z });
+  }
+}
+
+/** Market stall: a trestle table under a striped awning, stocked with the tile's good. */
+export function marketStall(p: Parts, x: number, z: number, face: number, good: 'pretzels' | 'hops' | 'timber') {
+  const f = new Frame(p, x, z, face);
+  f.box(0.24, 0.015, 0.11, PALETTE.benchWood, 0, 0.075, 0, { vary: 0.06 });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) f.box(0.012, 0.075, 0.012, PALETTE.timber, sx * 0.1, 0.037, sz * 0.045);
+  for (const sx of [-1, 1]) f.box(0.012, 0.22, 0.012, PALETTE.timber, sx * 0.11, 0.11, -0.05);
+  for (let i = 0; i < 4; i++) f.box(0.065, 0.01, 0.15, i % 2 ? PALETTE.whitewash : PALETTE.bavariaBlue, -0.0975 + i * 0.065, 0.225, 0.0, { rz: 0, vary: 0.03 });
+  if (good === 'pretzels') {
+    for (let i = 0; i < 3; i++) f.add(new THREE.TorusGeometry(0.022, 0.009, 4, 7), 0xa8642c, -0.06 + i * 0.06, 0.092, 0.01, { rx: Math.PI / 2, vary: 0.08 });
+  } else if (good === 'hops') {
+    for (let i = 0; i < 4; i++) f.add(new THREE.IcosahedronGeometry(0.024, 0), PALETTE.hops, -0.075 + i * 0.05, 0.1, 0.01, { vary: 0.1 });
+    f.add(new THREE.CylinderGeometry(0.03, 0.03, 0.06, 6), PALETTE.benchWood, 0.15, 0.03, 0.06);
+  } else {
+    for (let i = 0; i < 3; i++) f.add(new THREE.CylinderGeometry(0.018, 0.018, 0.2, 6), 0x9a6a42, 0, 0.1 + i * 0.022, -0.02 + (i % 2) * 0.03, { rz: Math.PI / 2, vary: 0.08 });
+    f.add(new THREE.CylinderGeometry(0.018, 0.018, 0.2, 6), 0x9a6a42, 0, 0.018, 0.1, { rz: Math.PI / 2, vary: 0.08 });
+    f.add(new THREE.CylinderGeometry(0.018, 0.018, 0.2, 6), 0x9a6a42, 0, 0.018, 0.14, { rz: Math.PI / 2, vary: 0.08 });
+  }
+}
